@@ -1,7 +1,5 @@
 # donald
 
-[![Build Status](https://travis-ci.com/orlikoski/donald.svg?branch=main)](https://travis-ci.com/orlikoski/donald)
-
 donald — Live Response Collection tool by Thomas Kastner
 
 ## What is donald

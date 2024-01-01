@@ -33,7 +33,7 @@ func NewRegexpMatcher(pattern string) Matcher {
 	return re.MatchString
 }
 
-func LoadMatchers(cfg *Configuration) ([]Matcher, []string, error) {
+func LoadMatchers(cfg Configuration) ([]Matcher, []string, error) {
 	m := DefaultCollection()
 	paths := ForcedFiles()
 
@@ -87,7 +87,7 @@ func LoadMatchers(cfg *Configuration) ([]Matcher, []string, error) {
 	return m, paths, nil
 }
 
-func GetPaths(cfg *Configuration) ([]string, error) {
+func GetPaths(cfg Configuration) ([]string, error) {
 	scanned := 0
 	matchers, paths, err := LoadMatchers(cfg)
 	if err != nil {
@@ -130,7 +130,7 @@ func GetPaths(cfg *Configuration) ([]string, error) {
 	return paths, err
 }
 
-func CollectFile(cfg *Configuration, archive *zip.Writer, path string) error {
+func CollectFile(cfg Configuration, archive *zip.Writer, path string) error {
 	rel, _ := filepath.Rel(filepath.VolumeName(path)+"/", filepath.ToSlash(path))
 	r, err := os.Open(path)
 	if err != nil {

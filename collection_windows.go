@@ -77,7 +77,7 @@ func ForcedFiles() []string {
 	}
 }
 
-func CollectFileRaw(cfg *Configuration, archive *zip.Writer, path string) error {
+func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) error {
 	rel, err := filepath.Rel(filepath.VolumeName(path)+"/", filepath.ToSlash(path))
 	if err != nil {
 		return err

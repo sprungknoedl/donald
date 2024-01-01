@@ -140,6 +140,6 @@ func ForcedFiles() []string {
 	return []string{}
 }
 
-func CollectFileRaw(cfg *Configuration, archive *zip.Writer, path string) error {
+func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) error {
 	return CollectFile(cfg, archive, path)
 }

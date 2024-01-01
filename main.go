@@ -11,68 +11,103 @@ import (
 	"time"
 )
 
+// Loggers for different log levels
 var (
 	WarnLogger *log.Logger
 	InfoLogger *log.Logger
-	ErrrLogger *log.Logger
+	ErrLogger  *log.Logger
 )
 
+// Configuration struct holds parameters for the application
 type Configuration struct {
-	OutputDir  string
-	OutputFile string
-	LogFile    string
-
-	SftpAddr string
-	SftpUser string
-	SftpPass string
-	SftpDir  string
-	SftpFile string
-
-	CollectionRoots   []string
-	CustomListFile    string
-	CustomListReplace bool
-
-	RawAccess bool
+	OutputDir         string   // Directory for the generated zip archive
+	OutputFile        string   // Name of the generated zip archive file
+	LogFile           string   // Log file path
+	SftpAddr          string   // SFTP server address
+	SftpUser          string   // SFTP server username
+	SftpPass          string   // SFTP server password
+	SftpDir           string   // Target directory on the SFTP server
+	SftpFile          string   // Target filename on the SFTP server
+	CollectionRoots   []string // Search root paths
+	CustomListFile    string   // Custom collection paths file
+	CustomListReplace bool     // Replace default collection paths with custom ones
+	RawAccess         bool     // Use raw NTFS access (Windows only)
 }
 
 func main() {
+	// Initialize loggers
 	InfoLogger = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime)
 	WarnLogger = log.New(os.Stdout, "WARN: ", log.Ldate|log.Ltime)
-	ErrrLogger = log.New(os.Stdout, "ERRR: ", log.Ldate|log.Ltime)
+	ErrLogger = log.New(os.Stdout, "ERRR: ", log.Ldate|log.Ltime)
 
+	// Record the start time
 	begin := time.Now()
 	defer func() {
-		InfoLogger.Printf("nut finished in %v.", time.Since(begin))
+		// Log the total execution time
+		InfoLogger.Printf("donald finished in %v.", time.Since(begin))
 	}()
 
+	// Parse command line parameters
 	cfg, err := ParseConfig()
 	if err != nil {
-		ErrrLogger.Fatalf("Coud not parse command line parameters: %q", err)
+		ErrLogger.Fatalf("Coud not parse command line parameters: %q", err)
 	}
 
-	// ----------------------------------------------------
-	// step 1: traverse filesystem
-	// ----------------------------------------------------
+	paths, err := step1TraverseFS(cfg)
+	if err != nil {
+		ErrLogger.Fatalf("Stage 1: Unrecoverable error: %v", err)
+	}
+
+	err = step2CollectFiles(cfg, paths)
+	if err != nil {
+		ErrLogger.Fatalf("Stage 2: Unrecoverable error: %v", err)
+	}
+
+	err = step3UploadFiles(cfg)
+	if err != nil {
+		ErrLogger.Fatalf("Stage 3: Unrecoverable error: %v", err)
+	}
+
+	err = step4CleanUp(cfg)
+	if err != nil {
+		ErrLogger.Fatalf("Stage 4: Unrecoverable error: %v", err)
+	}
+}
+
+// step1TraverseFS traverses the file system based on the provided Configuration,
+// collects file paths, and logs the progress.
+func step1TraverseFS(cfg Configuration) ([]string, error) {
+	// Log the start of Stage 1
 	InfoLogger.Println("Stage 1: Traversing file tree ...")
 	start := time.Now()
+
 	paths, err := GetPaths(cfg)
 	if err != nil {
-		ErrrLogger.Fatalf("Stage 1: Unrecoverable error: %v", err)
+		return nil, err
 	}
+
+	// Log the completion of Stage 1 along with the elapsed time
 	InfoLogger.Printf("Stage 1 finished in %v", time.Since(start))
+	return paths, nil
+}
 
-	// ----------------------------------------------------
-	// step 2: collect files
-	// ----------------------------------------------------
+// step2CollectFiles collects files based on the provided file paths, creates a zip archive,
+// and logs the progress.
+func step2CollectFiles(cfg Configuration, paths []string) error {
+	// Log the start of Stage 2
 	InfoLogger.Println("Stage 2: Collecting files ...")
-	start = time.Now()
+	start := time.Now()
 
+	// Create the output file for the zip archive
 	fh, err := os.Create(filepath.Join(cfg.OutputDir, cfg.OutputFile))
 	if err != nil {
-		ErrrLogger.Fatalf("Stage 2: Unrecoverable error: %v", err)
+		return err
 	}
 
+	// Create a zip archive
 	archive := zip.NewWriter(fh)
+
+	// Iterate over file paths and collect files into the zip archive
 	for _, path := range paths {
 		if cfg.RawAccess {
 			err = CollectFileRaw(cfg, archive, path)
@@ -81,53 +116,75 @@ func main() {
 		}
 
 		if err != nil {
+			// Log a warning if file collection fails for a specific path
 			WarnLogger.Printf("Stage 2: Failed to collect file: %v", err)
 		}
 	}
 
+	// Close the zip archive
 	err = archive.Close()
 	if err != nil {
-		ErrrLogger.Fatalf("Stage 2: Unrecoverable error: %v", err)
+		return err
 	}
+
+	// Log the completion of Stage 2 along with the elapsed time
 	InfoLogger.Printf("Stage 2 finished in %v", time.Since(start))
-
-	// ----------------------------------------------------
-	// step 3: upload files
-	// ----------------------------------------------------
-	if cfg.SftpAddr == "" {
-		InfoLogger.Println("Stage 3: Uploading archive to SFTP skipped.")
-		InfoLogger.Println("Stage 4: Cleanup skipped.")
-		return
-	}
-
-	InfoLogger.Println("Stage 3: Uploading archive to SFTP ...")
-	start = time.Now()
-	err = Upload(cfg)
-	if err != nil {
-		ErrrLogger.Fatalf("Stage 3: Unrecoverable error: %v", err)
-	}
-	InfoLogger.Printf("Stage 3 finished in %v", time.Since(start))
-
-	// ----------------------------------------------------
-	// step 4: clean up
-	// ----------------------------------------------------
-	InfoLogger.Println("Stage 4: Cleanup of temporary files ...")
-	start = time.Now()
-	err = os.Remove(filepath.Join(cfg.OutputDir, cfg.OutputFile))
-	if err != nil {
-		ErrrLogger.Fatalf("Stage 4: Unrecoverable error: %v", err)
-	}
-	InfoLogger.Printf("Stage 4  finished in %v", time.Since(start))
+	return nil
 }
 
-func ParseConfig() (*Configuration, error) {
-	// get default values
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil, err
+// step3UploadFiles uploads the zip archive to an SFTP server (if configured)
+// and logs the progress.
+func step3UploadFiles(cfg Configuration) error {
+	// Check if SFTP address is empty, if so, skip the upload
+	if cfg.SftpAddr == "" {
+		InfoLogger.Println("Stage 3: Uploading archive to SFTP skipped.")
+		return nil
 	}
 
+	// Log the start of Stage 3
+	InfoLogger.Println("Stage 3: Uploading archive to SFTP ...")
+	start := time.Now()
+
+	// Upload the zip archive to the SFTP server
+	err := Upload(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Log the completion of Stage 3 along with the elapsed time
+	InfoLogger.Printf("Stage 3 finished in %v", time.Since(start))
+	return nil
+}
+
+// step4CleanUp removes temporary files created during the process
+// and logs the progress.
+func step4CleanUp(cfg Configuration) error {
+	// Log the start of Stage 4
+	InfoLogger.Println("Stage 4: Cleanup of temporary files ...")
+	start := time.Now()
+
+	// Remove the zip archive file
+	err := os.Remove(filepath.Join(cfg.OutputDir, cfg.OutputFile))
+	if err != nil {
+		return err
+	}
+
+	// Log the completion of Stage 4 along with the elapsed time
+	InfoLogger.Printf("Stage 4  finished in %v", time.Since(start))
+	return nil
+}
+
+// ParseConfig parses command line parameters and returns a Configuration struct
+func ParseConfig() (Configuration, error) {
+	// Initialize Configuration struct
 	cfg := Configuration{}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return cfg, err
+	}
+
+	// Set command line flags and default values
 	flag.StringVar(&cfg.OutputDir, "od", ".", "Defines the directory that the zip archive will be created in.")
 	flag.StringVar(&cfg.OutputFile, "of", hostname+".zip", "Defines the name of the zip archive created.")
 
@@ -149,5 +206,5 @@ func ParseConfig() (*Configuration, error) {
 	flag.BoolVar(&cfg.RawAccess, "raw", true, "Use raw NTFS access. Only supported on Windows.")
 	flag.Parse()
 
-	return &cfg, nil
+	return cfg, nil
 }

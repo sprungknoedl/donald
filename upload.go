@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"io"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -9,8 +12,8 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Upload performs an SFTP upload using the provided configuration.
-func Upload(cfg Configuration) error {
+// UploadSFTP performs an SFTP upload using the provided configuration.
+func UploadSFTP(cfg Configuration) error {
 	// Establish an SSH connection to the SFTP server
 	conn, err := ssh.Dial("tcp", cfg.SftpAddr, &ssh.ClientConfig{
 		User:            cfg.SftpUser,
@@ -38,8 +41,49 @@ func Upload(cfg Configuration) error {
 	if err != nil {
 		return err
 	}
+	defer src.Close()
 
 	// Copy the content of the local file to the SFTP server
 	_, err = io.Copy(dst, src)
+	return err
+}
+
+// UploadDagobert performs an upload to a Dagobert instance using the provided configuration.
+func UploadDagobert(cfg Configuration) error {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Set multipart fields
+	writer.WriteField("Type", "Artifacts Collection")
+	writer.WriteField("Name", cfg.DagobertFile)
+	part, _ := writer.CreateFormFile("File", cfg.DagobertFile)
+
+	// Open the local file for reading
+	src, err := os.Open(filepath.Join(cfg.OutputDir, cfg.OutputFile))
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	// Copy the content of the local file to the multipart message
+	_, err = io.Copy(part, src)
+	if err != nil {
+		return err
+	}
+
+	// Finish the multipart message
+	err = writer.Close()
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", cfg.DagobertAddr, body)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("X-API-Key", cfg.DagobertKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	_, err = http.DefaultClient.Do(req)
 	return err
 }

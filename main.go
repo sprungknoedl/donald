@@ -28,6 +28,9 @@ type Configuration struct {
 	SftpPass          string   // SFTP server password
 	SftpDir           string   // Target directory on the SFTP server
 	SftpFile          string   // Target filename on the SFTP server
+	DagobertAddr      string   // Dagobert server URL
+	DagobertKey       string   // Dagobert API key
+	DagobertFile      string   // Target filename on Dagobert
 	CollectionRoots   []string // Search root paths
 	CustomListFile    string   // Custom collection paths file
 	CustomListReplace bool     // Replace default collection paths with custom ones
@@ -63,9 +66,14 @@ func main() {
 		ErrLogger.Fatalf("Stage 2: Unrecoverable error: %v", err)
 	}
 
-	err = step3UploadFiles(cfg)
+	err = step3UploadSFTP(cfg)
 	if err != nil {
-		ErrLogger.Fatalf("Stage 3: Unrecoverable error: %v", err)
+		ErrLogger.Fatalf("Stage 3 (SFTP): Unrecoverable error: %v", err)
+	}
+
+	err = step3UploadDagobert(cfg)
+	if err != nil {
+		ErrLogger.Fatalf("Stage 3 (Dagobert): Unrecoverable error: %v", err)
 	}
 
 	err = step4CleanUp(cfg)
@@ -132,9 +140,9 @@ func step2CollectFiles(cfg Configuration, paths []string) error {
 	return nil
 }
 
-// step3UploadFiles uploads the zip archive to an SFTP server (if configured)
+// step3UploadSFTP uploads the zip archive to an SFTP server (if configured)
 // and logs the progress.
-func step3UploadFiles(cfg Configuration) error {
+func step3UploadSFTP(cfg Configuration) error {
 	// Check if SFTP address is empty, if so, skip the upload
 	if cfg.SftpAddr == "" {
 		InfoLogger.Println("Stage 3: Uploading archive to SFTP skipped.")
@@ -146,13 +154,37 @@ func step3UploadFiles(cfg Configuration) error {
 	start := time.Now()
 
 	// Upload the zip archive to the SFTP server
-	err := Upload(cfg)
+	err := UploadSFTP(cfg)
 	if err != nil {
 		return err
 	}
 
 	// Log the completion of Stage 3 along with the elapsed time
-	InfoLogger.Printf("Stage 3 finished in %v", time.Since(start))
+	InfoLogger.Printf("Stage 3 (SFTP) finished in %v", time.Since(start))
+	return nil
+}
+
+// step3UploadDagobert uploads the zip archive to an Dagobert server (if configured)
+// and logs the progress.
+func step3UploadDagobert(cfg Configuration) error {
+	// Check if Dagobert address is empty, if so, skip the upload
+	if cfg.DagobertAddr == "" {
+		InfoLogger.Println("Stage 3: Uploading archive to Dagobert skipped.")
+		return nil
+	}
+
+	// Log the start of Stage 3
+	InfoLogger.Println("Stage 3: Uploading archive to Dagobert ...")
+	start := time.Now()
+
+	// Upload the zip archive to the SFTP server
+	err := UploadDagobert(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Log the completion of Stage 3 along with the elapsed time
+	InfoLogger.Printf("Stage 3 (Dagobert) finished in %v", time.Since(start))
 	return nil
 }
 
@@ -193,6 +225,10 @@ func ParseConfig() (Configuration, error) {
 	flag.StringVar(&cfg.SftpPass, "sftp-pass", "", "SFTP password")
 	flag.StringVar(&cfg.SftpDir, "sftp-dir", ".", "Defines the output directory on the SFTP server, as it may be a different location than the archive generated on disk.")
 	flag.StringVar(&cfg.SftpFile, "sftp-file", hostname+".zip", "Defines the name of the zip archive created on the SFTP server.")
+
+	flag.StringVar(&cfg.DagobertAddr, "dagobert-addr", "", "Dagobert URL to evidence endpoint")
+	flag.StringVar(&cfg.DagobertKey, "dagobert-key", "", "Dagobert API Key")
+	flag.StringVar(&cfg.DagobertFile, "dagobert-file", hostname+".zip", "Defines the name of the zip archive created on the SFTP server.")
 
 	defaultRoots := strings.Join(DefaulRootPaths(), ", ")
 	usageRoots := fmt.Sprintf("Defines the search root path(s). If multiple root paths are given, they are traversed in order. (default %q)", defaultRoots)

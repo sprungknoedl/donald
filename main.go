@@ -20,21 +20,31 @@ var (
 
 // Configuration struct holds parameters for the application
 type Configuration struct {
-	OutputDir         string   // Directory for the generated zip archive
-	OutputFile        string   // Name of the generated zip archive file
-	LogFile           string   // Log file path
-	SftpAddr          string   // SFTP server address
-	SftpUser          string   // SFTP server username
-	SftpPass          string   // SFTP server password
-	SftpDir           string   // Target directory on the SFTP server
-	SftpFile          string   // Target filename on the SFTP server
-	DagobertAddr      string   // Dagobert server URL
-	DagobertKey       string   // Dagobert API key
-	DagobertFile      string   // Target filename on Dagobert
+	OutputDir  string // Directory for the generated zip archive
+	OutputFile string // Name of the generated zip archive file
+	LogFile    string // Log file path
+
+	SftpAddr string // SFTP server address
+	SftpUser string // SFTP server username
+	SftpPass string // SFTP server password
+	SftpDir  string // Target directory on the SFTP server
+	SftpFile string // Target filename on the SFTP server
+
+	DagobertAddr string // Dagobert server URL
+	DagobertCase string // Dagobert case id
+	DagobertKey  string // Dagobert API key
+	DagobertFile string // Target filename on Dagobert
+
 	CollectionRoots   []string // Search root paths
 	CustomListFile    string   // Custom collection paths file
 	CustomListReplace bool     // Replace default collection paths with custom ones
-	RawAccess         bool     // Use raw NTFS access (Windows only)
+
+	RawAccess bool // Use raw NTFS access (Windows only)
+
+	SkipTraversal  bool
+	SkipCollection bool
+	SkipUpload     bool
+	SkipCleanup    bool
 }
 
 func main() {
@@ -85,6 +95,11 @@ func main() {
 // step1TraverseFS traverses the file system based on the provided Configuration,
 // collects file paths, and logs the progress.
 func step1TraverseFS(cfg Configuration) ([]string, error) {
+	if cfg.SkipTraversal {
+		InfoLogger.Println("Stage 1: Traversing file tree skipped.")
+		return []string{}, nil
+	}
+
 	// Log the start of Stage 1
 	InfoLogger.Println("Stage 1: Traversing file tree ...")
 	start := time.Now()
@@ -102,6 +117,11 @@ func step1TraverseFS(cfg Configuration) ([]string, error) {
 // step2CollectFiles collects files based on the provided file paths, creates a zip archive,
 // and logs the progress.
 func step2CollectFiles(cfg Configuration, paths []string) error {
+	if cfg.SkipCollection {
+		InfoLogger.Println("Stage 2: Collecting files skipped.")
+		return nil
+	}
+
 	// Log the start of Stage 2
 	InfoLogger.Println("Stage 2: Collecting files ...")
 	start := time.Now()
@@ -144,7 +164,7 @@ func step2CollectFiles(cfg Configuration, paths []string) error {
 // and logs the progress.
 func step3UploadSFTP(cfg Configuration) error {
 	// Check if SFTP address is empty, if so, skip the upload
-	if cfg.SftpAddr == "" {
+	if cfg.SkipUpload || cfg.SftpAddr == "" {
 		InfoLogger.Println("Stage 3: Uploading archive to SFTP skipped.")
 		return nil
 	}
@@ -168,7 +188,7 @@ func step3UploadSFTP(cfg Configuration) error {
 // and logs the progress.
 func step3UploadDagobert(cfg Configuration) error {
 	// Check if Dagobert address is empty, if so, skip the upload
-	if cfg.DagobertAddr == "" {
+	if cfg.SkipUpload || cfg.DagobertAddr == "" {
 		InfoLogger.Println("Stage 3: Uploading archive to Dagobert skipped.")
 		return nil
 	}
@@ -191,6 +211,11 @@ func step3UploadDagobert(cfg Configuration) error {
 // step4CleanUp removes temporary files created during the process
 // and logs the progress.
 func step4CleanUp(cfg Configuration) error {
+	if cfg.SkipCleanup {
+		InfoLogger.Println("Stage 4: Cleanup of temporary files skipped.")
+		return nil
+	}
+
 	// Log the start of Stage 4
 	InfoLogger.Println("Stage 4: Cleanup of temporary files ...")
 	start := time.Now()
@@ -211,6 +236,7 @@ func ParseConfig() (Configuration, error) {
 	// Initialize Configuration struct
 	cfg := Configuration{}
 
+	now := time.Now().Format("20060102150405")
 	hostname, err := os.Hostname()
 	if err != nil {
 		return cfg, err
@@ -218,17 +244,18 @@ func ParseConfig() (Configuration, error) {
 
 	// Set command line flags and default values
 	flag.StringVar(&cfg.OutputDir, "od", ".", "Defines the directory that the zip archive will be created in.")
-	flag.StringVar(&cfg.OutputFile, "of", hostname+".zip", "Defines the name of the zip archive created.")
+	flag.StringVar(&cfg.OutputFile, "of", hostname+"-"+now+".zip", "Defines the name of the zip archive created.")
 
 	flag.StringVar(&cfg.SftpAddr, "sftp-addr", "", "SFTP server address")
 	flag.StringVar(&cfg.SftpUser, "sftp-user", "", "SFTP username")
 	flag.StringVar(&cfg.SftpPass, "sftp-pass", "", "SFTP password")
 	flag.StringVar(&cfg.SftpDir, "sftp-dir", ".", "Defines the output directory on the SFTP server, as it may be a different location than the archive generated on disk.")
-	flag.StringVar(&cfg.SftpFile, "sftp-file", hostname+".zip", "Defines the name of the zip archive created on the SFTP server.")
+	flag.StringVar(&cfg.SftpFile, "sftp-file", hostname+"-"+now+".zip", "Defines the name of the zip archive created on the SFTP server.")
 
-	flag.StringVar(&cfg.DagobertAddr, "dagobert-addr", "", "Dagobert URL to evidence endpoint")
+	flag.StringVar(&cfg.DagobertAddr, "dagobert-addr", "", "Dagobert URL")
+	flag.StringVar(&cfg.DagobertCase, "dagobert-case", "", "Dagobert case id")
 	flag.StringVar(&cfg.DagobertKey, "dagobert-key", "", "Dagobert API Key")
-	flag.StringVar(&cfg.DagobertFile, "dagobert-file", hostname+".zip", "Defines the name of the zip archive created on the SFTP server.")
+	flag.StringVar(&cfg.DagobertFile, "dagobert-file", hostname+"-"+now+".zip", "Defines the name of the zip archive created on the SFTP server.")
 
 	defaultRoots := strings.Join(DefaulRootPaths(), ", ")
 	usageRoots := fmt.Sprintf("Defines the search root path(s). If multiple root paths are given, they are traversed in order. (default %q)", defaultRoots)
@@ -240,6 +267,12 @@ func ParseConfig() (Configuration, error) {
 	flag.BoolVar(&cfg.CustomListReplace, "replace-paths", false, "Replace the default collection paths with those specified via '-c FILE'.")
 
 	flag.BoolVar(&cfg.RawAccess, "raw", true, "Use raw NTFS access. Only supported on Windows.")
+
+	flag.BoolVar(&cfg.SkipTraversal, "skip-traversal", true, "Skip step #1: traversal / enumaration.")
+	flag.BoolVar(&cfg.SkipCollection, "skip-collection", true, "Skip step #2: collection.")
+	flag.BoolVar(&cfg.SkipUpload, "skip-upload", true, "Skip step #3: upload.")
+	flag.BoolVar(&cfg.SkipCleanup, "skip-cleanup", true, "Skip step #4: cleanup.")
+
 	flag.Parse()
 
 	return cfg, nil

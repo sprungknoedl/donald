@@ -5,6 +5,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -77,7 +78,12 @@ func UploadDagobert(cfg Configuration) error {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", cfg.DagobertAddr, body)
+	dst, err := url.JoinPath(cfg.DagobertAddr, "/cases/", cfg.DagobertCase, "/evidences/")
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", dst, body)
 	if err != nil {
 		return err
 	}

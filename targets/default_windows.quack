@@ -1,0 +1,51 @@
+# == forced files
+force	C:\$LogFile
+force	C:\$MFT
+force	C:\$Extend\$UsnJrnl:$J
+
+// == static matchers
+static	Windows\SchedLgU.Txt
+static	Windows\inf\setupapi.dev.log
+static	Windows\System32\drivers\etc\hosts
+static	Windows\System32\config\SAM
+static	Windows\System32\config\SYSTEM
+static	Windows\System32\config\SOFTWARE
+static	Windows\System32\config\SECURITY
+static	Windows\System32\config\SAM.LOG1
+static	Windows\System32\config\SYSTEM.LOG1
+static	Windows\System32\config\SOFTWARE.LOG1
+static	Windows\System32\config\SECURITY.LOG1
+static	Windows\System32\config\SAM.LOG2
+static	Windows\System32\config\SYSTEM.LOG2
+static	Windows\System32\config\SOFTWARE.LOG2
+static	Windows\System32\config\SECURITY.LOG2
+
+// == glob matchers
+glob	Windows\Tasks\**
+glob	Windows\Prefetch\**
+glob	Windows\System32\sru\**
+glob	Windows\System32\winevt\Logs\**
+glob	Windows\System32\Tasks\**
+glob	Windows\System32\LogFiles\W3SVC1\**
+glob	Windows\Appcompat\Programs\**
+glob	ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\**
+glob	$Recycle.Bin\**\$I*
+glob	$Recycle.Bin\$I*
+
+glob	Users\*\NTUSER.DAT
+glob	Users\*\NTUSER.DAT.LOG1
+glob	Users\*\NTUSER.DAT.LOG2
+glob	Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat
+glob	Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG1
+glob	Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG2
+glob	Users\*\AppData\Local\Google\Chrome\User Data\Default\History
+glob	Users\*\AppData\Local\Microsoft\Edge\User Data\Default\History
+glob	Users\*\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline\ConsoleHost_history.txt
+glob	Users\*\AppData\Roaming\Microsoft\Windows\Recent\**
+glob	Users\*\AppData\Local\Microsoft\Windows\WebCache\**
+glob	Users\*\AppData\Roaming\Microsoft\Windows\Recent\AutomaticDestinations\**
+glob	Users\*\AppData\Roaming\Mozilla\Firefox\Profiles\**
+glob	Users\*\AppData\Local\ConnectedDevicesPlatform\**
+glob	Users\*\AppData\Local\Microsoft\Windows\Explorer\**
+
+// == regexp matchers

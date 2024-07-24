@@ -1,0 +1,42 @@
+# == forced files
+
+# == static matchers
+static	/etc/hosts.allow
+static	/etc/hosts.deny
+static	/etc/hosts
+static	/private/etc/hosts.allow
+static	/private/etc/hosts.deny
+static	/private/etc/hosts
+static	/etc/passwd
+static	/etc/group
+static	/private/etc/passwd
+static	/private/etc/group
+
+# == glob matchers
+glob	**/Library/*Support/Google/Chrome/Default/*
+glob	**/Library/*Support/Google/Chrome/Default/History*
+glob	**/Library/*Support/Google/Chrome/Default/Cookies*
+glob	**/Library/*Support/Google/Chrome/Default/Bookmarks*
+glob	**/Library/*Support/Google/Chrome/Default/Extensions/**
+glob	**/Library/*Support/Google/Chrome/Default/Last*
+glob	**/Library/*Support/Google/Chrome/Default/Shortcuts*
+glob	**/Library/*Support/Google/Chrome/Default/Top*
+glob	**/Library/*Support/Google/Chrome/Default/Visited*
+glob	**/places.sqlite*
+glob	**/downloads.sqlite*
+glob	**/*.plist
+glob	/Users/*/.*history
+glob	/root/.*history
+glob	/System/Library/StartupItems/**
+glob	/System/Library/LaunchAgents/**
+glob	/System/Library/LaunchDaemons/**
+glob	/Library/LaunchAgents/**
+glob	/Library/LaunchDaemons/**
+glob	/Library/StartupItems/**
+glob	/var/log/**
+glob	/private/var/log/**
+glob	/private/etc/rc.d/**
+glob	/etc/rc.d/**
+glob	/.fseventsd/**
+
+# == regexp matchers

@@ -9,71 +9,16 @@ import (
 	"path/filepath"
 
 	"www.velocidex.com/golang/go-ntfs/parser"
+
+	_ "embed"
 )
+
+//go:embed targets/default_windows.quack
+var defaultQuack []byte
 
 func DefaulRootPaths() []string {
 	return []string{
 		"C:\\",
-	}
-}
-
-func DefaultCollection() []Matcher {
-	return []Matcher{
-		// == static matchers
-		NewStaticMatcher("Windows\\SchedLgU.Txt"),
-		NewStaticMatcher("Windows\\inf\\setupapi.dev.log"),
-		NewStaticMatcher("Windows\\System32\\drivers\\etc\\hosts"),
-		NewStaticMatcher("Windows\\System32\\config\\SAM"),
-		NewStaticMatcher("Windows\\System32\\config\\SYSTEM"),
-		NewStaticMatcher("Windows\\System32\\config\\SOFTWARE"),
-		NewStaticMatcher("Windows\\System32\\config\\SECURITY"),
-		NewStaticMatcher("Windows\\System32\\config\\SAM.LOG1"),
-		NewStaticMatcher("Windows\\System32\\config\\SYSTEM.LOG1"),
-		NewStaticMatcher("Windows\\System32\\config\\SOFTWARE.LOG1"),
-		NewStaticMatcher("Windows\\System32\\config\\SECURITY.LOG1"),
-		NewStaticMatcher("Windows\\System32\\config\\SAM.LOG2"),
-		NewStaticMatcher("Windows\\System32\\config\\SYSTEM.LOG2"),
-		NewStaticMatcher("Windows\\System32\\config\\SOFTWARE.LOG2"),
-		NewStaticMatcher("Windows\\System32\\config\\SECURITY.LOG2"),
-
-		// == glob matchers
-		NewGlobMatcher("Windows\\Tasks\\**"),
-		NewGlobMatcher("Windows\\Prefetch\\**"),
-		NewGlobMatcher("Windows\\System32\\sru\\**"),
-		NewGlobMatcher("Windows\\System32\\winevt\\Logs\\**"),
-		NewGlobMatcher("Windows\\System32\\Tasks\\**"),
-		NewGlobMatcher("Windows\\System32\\LogFiles\\W3SVC1\\**"),
-		NewGlobMatcher("Windows\\Appcompat\\Programs\\**"),
-		NewGlobMatcher("ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\**"),
-		NewGlobMatcher("$Recycle.Bin\\**\\$I*"),
-		NewGlobMatcher("$Recycle.Bin\\$I*"),
-
-		NewGlobMatcher("Users\\*\\NTUSER.DAT"),
-		NewGlobMatcher("Users\\*\\NTUSER.DAT.LOG1"),
-		NewGlobMatcher("Users\\*\\NTUSER.DAT.LOG2"),
-		NewGlobMatcher("Users\\*\\AppData\\Local\\Microsoft\\Windows\\UsrClass.dat"),
-		NewGlobMatcher("Users\\*\\AppData\\Local\\Microsoft\\Windows\\UsrClass.dat.LOG1"),
-		NewGlobMatcher("Users\\*\\AppData\\Local\\Microsoft\\Windows\\UsrClass.dat.LOG2"),
-		NewGlobMatcher("Users\\*\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\History"),
-		NewGlobMatcher("Users\\*\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\History"),
-		NewGlobMatcher("Users\\*\\AppData\\Roaming\\Microsoft\\Windows\\PowerShell\\PSReadline\\ConsoleHost_history.txt"),
-		NewGlobMatcher("Users\\*\\AppData\\Roaming\\Microsoft\\Windows\\Recent\\**"),
-		NewGlobMatcher("Users\\*\\AppData\\Local\\Microsoft\\Windows\\WebCache\\**"),
-		NewGlobMatcher("Users\\*\\AppData\\Roaming\\Microsoft\\Windows\\Recent\\AutomaticDestinations\\**"),
-		NewGlobMatcher("Users\\*\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\**"),
-		NewGlobMatcher("Users\\*\\AppData\\Local\\ConnectedDevicesPlatform\\**"),
-		NewGlobMatcher("Users\\*\\AppData\\Local\\Microsoft\\Windows\\Explorer\\**"),
-
-		// == regexp matchers
-		// nil
-	}
-}
-
-func ForcedFiles() []string {
-	return []string{
-		"C:\\$LogFile",
-		"C:\\$MFT",
-		"C:\\$Extend\\$UsnJrnl:$J",
 	}
 }
 

@@ -1,0 +1,122 @@
+# == forced files
+
+# == static matchers
+# Super user
+static	/root/.ssh/config
+static	/root/.ssh/known_hosts
+static	/root/.ssh/authorized_keys
+static	/root/.selected_editor
+static	/root/.viminfo
+static	/root/.lesshist
+static	/root/.profile
+static	/root/.selected_editor
+
+# Boot
+static	/boot/grub/grub.cfg
+static	/boot/grub2/grub.cfg
+
+# Sys
+static	/sys/firmware/acpi/tables/DSDT
+
+# etc
+static	/etc/hosts.allow
+static	/etc/hosts.deny
+static	/etc/hosts
+static	/etc/passwd
+static	/etc/group
+static	/etc/crontab
+static	/etc/cron.allow
+static	/etc/cron.deny
+static	/etc/anacrontab
+static	/var/spool/anacron/cron.daily
+static	/var/spool/anacron/cron.hourly
+static	/var/spool/anacron/cron.weekly
+static	/var/spool/anacron/cron.monthly
+static	/etc/apt/sources.list
+static	/etc/apt/trusted.gpg
+static	/etc/apt/trustdb.gpg
+static	/etc/resolv.conf
+static	/etc/fstab
+static	/etc/issues
+static	/etc/issues.net
+static	/etc/insserv.conf
+static	/etc/localtime
+static	/etc/timezone
+static	/etc/pam.conf
+static	/etc/rsyslog.conf
+static	/etc/xinetd.conf
+static	/etc/netgroup
+static	/etc/nsswitch.conf
+static	/etc/ntp.conf
+static	/etc/yum.conf
+static	/etc/chrony.conf
+static	/etc/chrony
+static	/etc/sudoers
+static	/etc/logrotate.conf
+static	/etc/environment
+static	/etc/hostname
+static	/etc/host.conf
+static	/etc/fstab
+static	/etc/machine-id
+static	/etc/screen-rc
+
+# == glob matchers
+# User profiles
+glob	/home/*/.*history
+glob	/home/*/.ssh/known_hosts
+glob	/home/*/.ssh/config
+glob	/home/*/.ssh/autorized_keys
+glob	/home/*/.viminfo
+glob	/home/*/.profile
+glob	/home/*/.*rc
+glob	/home/*/.*_logout
+glob	/home/*/.selected_editor
+glob	/home/*/.wget-hsts
+glob	/home/*/.gitconfig
+
+# Firefox artifacts
+glob	/home/*/.mozilla/firefox/*.default*/**/*.sqlite*
+glob	/home/*/.mozilla/firefox/*.default*/**/*.json
+glob	/home/*/.mozilla/firefox/*.default*/**/*.txt
+glob	/home/*/.mozilla/firefox/*.default*/**/*.db*
+
+# Chrome artifacts
+glob	/home/*/.config/google-chrome/Default/History*
+glob	/home/*/.config/google-chrome/Default/Cookies*
+glob	/home/*/.config/google-chrome/Default/Bookmarks*
+glob	/home/*/.config/google-chrome/Default/Extensions/**
+glob	/home/*/.config/google-chrome/Default/Last*
+glob	/home/*/.config/google-chrome/Default/Shortcuts*
+glob	/home/*/.config/google-chrome/Default/Top*
+glob	/home/*/.config/google-chrome/Default/Visited*
+glob	/home/*/.config/google-chrome/Default/Preferences*
+glob	/home/*/.config/google-chrome/Default/Login Data*
+glob	/home/*/.config/google-chrome/Default/Web Data*
+
+# Superuser profiles
+glob	/root/.*history
+glob	/root/.*rc
+glob	/root/.*_logout
+
+# var
+glob	/var/log/**
+glob	/var/spool/at/**
+glob	/var/spool/cron/**
+
+# etc
+glob	/etc/rc.d/**
+glob	/etc/cron.daily/**
+glob	/etc/cron.hourly/**
+glob	/etc/cron.weekly/**
+glob	/etc/cron.monthly/**
+glob	/etc/modprobe.d/**
+glob	/etc/modprobe-load.d/**
+glob	/etc/*-release
+glob	/etc/pam.d/**
+glob	/etc/rsyslog.d/**
+glob	/etc/yum.repos.d/**
+glob	/etc/init.d/**
+glob	/etc/systemd.d/**
+glob	/etc/default/**
+
+# == regexp matchers

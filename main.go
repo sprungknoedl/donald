@@ -35,9 +35,9 @@ type Configuration struct {
 	DagobertKey  string // Dagobert API key
 	DagobertFile string // Target filename on Dagobert
 
-	CollectionRoots   []string // Search root paths
-	CustomListFile    string   // Custom collection paths file
-	CustomListReplace bool     // Replace default collection paths with custom ones
+	CollectionRoots []string // Search root paths
+	QuackTargets    string   // Quack collection paths file
+	KapeTargets     string   // Kape target file (soon)
 
 	RawAccess bool // Use raw NTFS access (Windows only)
 
@@ -263,15 +263,14 @@ func ParseConfig() (Configuration, error) {
 		cfg.CollectionRoots = append(cfg.CollectionRoots, s)
 		return nil
 	})
-	flag.StringVar(&cfg.CustomListFile, "c", "", "Add custom collection paths (one entry per line). NOTE: Please see CUSTOM_PATH_TEMPLATE.txt for an example.")
-	flag.BoolVar(&cfg.CustomListReplace, "replace-paths", false, "Replace the default collection paths with those specified via '-c FILE'.")
+	flag.StringVar(&cfg.QuackTargets, "c", "", "Add custom collection paths (one entry per line). NOTE: Please see example.quack for the syntax.")
 
 	flag.BoolVar(&cfg.RawAccess, "raw", true, "Use raw NTFS access. Only supported on Windows.")
 
-	flag.BoolVar(&cfg.SkipTraversal, "skip-traversal", true, "Skip step #1: traversal / enumaration.")
-	flag.BoolVar(&cfg.SkipCollection, "skip-collection", true, "Skip step #2: collection.")
-	flag.BoolVar(&cfg.SkipUpload, "skip-upload", true, "Skip step #3: upload.")
-	flag.BoolVar(&cfg.SkipCleanup, "skip-cleanup", true, "Skip step #4: cleanup.")
+	flag.BoolVar(&cfg.SkipTraversal, "skip-traversal", false, "Skip step #1: traversal / enumaration.")
+	flag.BoolVar(&cfg.SkipCollection, "skip-collection", false, "Skip step #2: collection.")
+	flag.BoolVar(&cfg.SkipUpload, "skip-upload", false, "Skip step #3: upload.")
+	flag.BoolVar(&cfg.SkipCleanup, "skip-cleanup", false, "Skip step #4: cleanup.")
 
 	flag.Parse()
 

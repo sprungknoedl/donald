@@ -1,21 +1,21 @@
 #===========================================#
-# CyLR Custom File Path Collection Template #
+# Donald Custom File Path Collection Template #
 #===========================================#
 #
 # This file contains example methods for specifying a file or folder paths to 
-# collect with CyLR.
+# collect with Donald.
 #
 
 #################
 # General Usage #
 #################
 #
-# CyLR contains default paths per operating system that it will collect if you
+# Donald contains default paths per operating system that it will collect if you
 # do not specify this file. This file allows you to replace or extend the 
-# default collection capability of CyLR.
+# default collection capability of donald.
 #
-# To configure CyLR to only collect the paths specified in this file, you can 
-# provide this file at execution time as `CyLR.exe -c custom.txt` (where 
+# To configure donald to only collect the paths specified in this file, you can 
+# provide this file at execution time as `donald.exe -c custom.txt` (where 
 # custom.txt is this file's name and relative location). If you would like to
 # collect both default and custom items, you can accomplish this with `-d` in 
 # place of `-c`. If you only want to collect default items, you can omit either

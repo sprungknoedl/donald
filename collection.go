@@ -2,7 +2,7 @@ package main
 
 import (
 	"archive/zip"
-	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -34,57 +34,18 @@ func NewRegexpMatcher(pattern string) Matcher {
 }
 
 func LoadMatchers(cfg Configuration) ([]Matcher, []string, error) {
-	m := DefaultCollection()
-	paths := ForcedFiles()
-
-	// replace default matchers and forced files
-	if cfg.CustomListReplace {
-		m = []Matcher{}
-		paths = []string{}
-	}
-
 	// parse collector configuration
-	if cfg.CustomListFile != "" {
-		fh, err := os.Open(cfg.CustomListFile)
+	if cfg.QuackTargets != "" {
+		fh, err := os.Open(cfg.QuackTargets)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		line := 0
-		scanner := bufio.NewScanner(fh)
-		scanner.Split(bufio.ScanLines)
-		for scanner.Scan() {
-			line++
-			text := scanner.Text()
-			if text == "" || text[0] == '#' {
-				continue
-			}
-
-			matcher, pattern, ok := strings.Cut(text, "\t")
-			if !ok {
-				return nil, nil, fmt.Errorf("line %d: missing tab delimiter", line)
-			}
-
-			switch matcher {
-			case "static":
-				m = append(m, NewStaticMatcher(pattern))
-
-			case "glob":
-				m = append(m, NewGlobMatcher(pattern))
-
-			case "regex":
-				m = append(m, NewRegexpMatcher(pattern))
-
-			case "force":
-				paths = append(paths, pattern)
-
-			default:
-				return nil, nil, fmt.Errorf("line %d: unknown matcher %q", line, matcher)
-			}
-		}
+		return ParseQuack(fh)
+	} else {
+		r := bytes.NewReader(defaultQuack)
+		return ParseQuack(r)
 	}
-
-	return m, paths, nil
 }
 
 func GetPaths(cfg Configuration) ([]string, error) {

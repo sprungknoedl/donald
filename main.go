@@ -274,5 +274,9 @@ func ParseConfig() (Configuration, error) {
 
 	flag.Parse()
 
+	// Sanity checks & modifications
+	cfg.SkipTraversal = cfg.SkipTraversal || cfg.SkipCollection
+	cfg.SkipCleanup = cfg.SkipCleanup || cfg.SkipUpload || (cfg.SftpAddr == "" && cfg.DagobertAddr == "")
+
 	return cfg, nil
 }

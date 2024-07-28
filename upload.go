@@ -54,9 +54,13 @@ func UploadDagobert(cfg Configuration) error {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
+	// don't fail if hostname can't be resolved, just use empty string instead
+	hostname, _ := os.Hostname()
+
 	// Set multipart fields
-	writer.WriteField("Type", "Artifacts Collection")
+	writer.WriteField("Type", "Triage")
 	writer.WriteField("Name", cfg.DagobertFile)
+	writer.WriteField("Source", hostname)
 	part, _ := writer.CreateFormFile("File", cfg.DagobertFile)
 
 	// Open the local file for reading

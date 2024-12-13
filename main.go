@@ -37,7 +37,8 @@ type Configuration struct {
 
 	CollectionRoots []string // Search root paths
 	QuackTargets    string   // Quack collection paths file
-	KapeTargets     string   // Kape target file (soon)
+	KapeTargets     string   // Kape target name
+	KapeFiles       string   // Directory with Kape target and module files
 
 	RawAccess bool // Use raw NTFS access (Windows only)
 
@@ -264,6 +265,9 @@ func ParseConfig() (Configuration, error) {
 		return nil
 	})
 	flag.StringVar(&cfg.QuackTargets, "c", "", "Add custom collection paths (one entry per line). NOTE: Please see example.quack for the syntax.")
+
+	flag.StringVar(&cfg.KapeTargets, "kt", "", "The KAPE target configuration to collect, without the extension. ")
+	flag.StringVar(&cfg.KapeFiles, "kf", "KapeFiles", "Directory containing targets intended for use with KAPE.")
 
 	flag.BoolVar(&cfg.RawAccess, "raw", true, "Use raw NTFS access. Only supported on Windows.")
 

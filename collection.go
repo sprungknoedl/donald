@@ -42,6 +42,8 @@ func LoadMatchers(cfg Configuration) ([]Matcher, []string, error) {
 		}
 
 		return ParseQuack(fh)
+	} else if cfg.KapeTargets != "" {
+		return ParseKapeTargets(cfg.KapeTargets, cfg.KapeFiles)
 	} else {
 		r := bytes.NewReader(defaultQuack)
 		return ParseQuack(r)

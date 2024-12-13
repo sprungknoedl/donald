@@ -10,7 +10,7 @@ Donald is heavily inspired by [CYLR](https://github.com/orlikoski/CyLR).
 
 The main features are:
 
-* Quick collection (it's really fast)
+* Quick collection
 * Raw file collection process does not use Windows API
 * Collection of key artifacts by default.
 * Ability to specify custom targets for collection.
@@ -52,9 +52,7 @@ Usage of ./donald:
 
 ## Default Collection Paths
 
-All collection paths are case-insensitive. You can easily extend this list
-through the use of patterns as shown in CUSTOM_PATH_TEMPLATE.txt or by opening
-a pull request.
+All collection paths are case-insensitive. You can easily extend this list through the use of patterns as shown in CUSTOM_PATH_TEMPLATE.txt or by opening a pull request.
 
 The standard list of collected artifacts is as follows.
 
@@ -62,39 +60,39 @@ The standard list of collected artifacts is as follows.
 
 System Root (ie `C:\Windows`):
 
-* `\Windows\Tasks\**`
-* `\Windows\Prefetch\**`
-* `\Windows\System32\sru\**`
-* `\Windows\System32\winevt\Logs\**`
-* `\Windows\System32\Tasks\**`
-* `\Windows\System32\Logfiles\W3SVC1\**`
-* `\Windows\Appcompat\Programs\**`
-* `\Windows\SchedLgU.txt`
-* `\Windows\inf\setupapi.dev.log`
-* `\Windows\System32\drivers\etc\hosts`
-* `\Windows\System32\config\SAM`
-* `\Windows\System32\config\SOFTWARE`
-* `\Windows\System32\config\SECURITY`
-* `\Windows\System32\config\SOFTWARE`
-* `\Windows\System32\config\SAM.LOG1`
-* `\Windows\System32\config\SOFTWARE.LOG1`
-* `\Windows\System32\config\SECURITY.LOG1`
-* `\Windows\System32\config\SOFTWARE.LOG1`
-* `\Windows\System32\config\SAM.LOG2`
-* `\Windows\System32\config\SOFTWARE.LOG2`
-* `\Windows\System32\config\SECURITY.LOG2`
-* `\Windows\System32\config\SOFTWARE.LOG2`
+* `Windows\Tasks\**`
+* `Windows\Prefetch\**`
+* `Windows\System32\sru\**`
+* `Windows\System32\winevt\Logs\**`
+* `Windows\System32\Tasks\**`
+* `Windows\System32\Logfiles\W3SVC1\**`
+* `Windows\Appcompat\Programs\**`
+* `Windows\SchedLgU.txt`
+* `Windows\inf\setupapi.dev.log`
+* `Windows\System32\drivers\etc\hosts`
+* `Windows\System32\config\SAM`
+* `Windows\System32\config\SOFTWARE`
+* `Windows\System32\config\SECURITY`
+* `Windows\System32\config\SOFTWARE`
+* `Windows\System32\config\SAM.LOG1`
+* `Windows\System32\config\SOFTWARE.LOG1`
+* `Windows\System32\config\SECURITY.LOG1`
+* `Windows\System32\config\SOFTWARE.LOG1`
+* `Windows\System32\config\SAM.LOG2`
+* `Windows\System32\config\SOFTWARE.LOG2`
+* `Windows\System32\config\SECURITY.LOG2`
+* `Windows\System32\config\SOFTWARE.LOG2`
 
 Program Data (ie `C:\ProgramData`):
 
-* `\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\**`
+* `ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\**`
 
 Drive Root (ie `C:`)
 
-* `\$Recycle.Bin\**\$I*`
-* `\$Recycle.Bin\$I*`
-* `\$LogFile`
-* `\$MFT`
+* `$Recycle.Bin\**\$I*`
+* `$Recycle.Bin\$I*`
+* `$LogFile`
+* `$MFT`
 
 User Profiles (ie `C:\Users\*`):
 
@@ -116,10 +114,7 @@ User Profiles (ie `C:\Users\*`):
 
 ### macOS
 
-**Note**: Modern macOS systems have functionality that will prompt the user to
-approve on a per-application basis, access to sensitive locations on a system.
-This can be overridden by modifying the System Preferences to give the donald
-binary and its parent process (such as Terminal) full disk access.
+**Note**: Modern macOS systems have functionality that will prompt the user to approve on a per-application basis, access to sensitive locations on a system. This can be overridden by modifying the System Preferences to give the donald binary and its parent process (such as Terminal) full disk access.
 
 System paths:
 
@@ -274,11 +269,9 @@ User paths:
 
 ## DEPENDENCIES
 
-In general: some kind of administrative rights on the target (root, sudo,
-administrator,...).
+In general: some kind of administrative rights on the target (root, sudo, administrator,...).
 
-Donald is a native binary that runs on Windows, Linux, and MacOS as
-a a self-contained executable. No external dependencies should be required (if so, please file a bug report).
+Donald is a native binary that runs on Windows, Linux, and MacOS as a a self-contained executable. No external dependencies should be required (if so, please file a bug report).
 
 ## EXAMPLES
 
@@ -319,30 +312,32 @@ donald -od data -of important-data.zip
 ```
 
 ### Collect USN $J Journal
-Collect a custom list of artifacts from a file containing paths
-The sample `custom.txt` requires a **tab delimiter** between pattern
-definition and pattern. Lines starting with `#` will be ignored:
+
+## Custom collection paths
+
+Donald allows for the specification of custom collection paths with the use of a configuration file provided after `-c` at the command line. A summary of the format is below, though full details are available within the `targets\example.quack` provided in the repository.
+
+Collect a custom list of artifacts from a file containing paths. The sample requires a **tab delimiter** between pattern definition and pattern. Lines starting with `#` will be ignored:
 
 ```text
 # Static paths are fixed, case-insensitive paths to compare
 # against files found on a system. This is the fastest search
 # method available, please use when possible.
-#
-static  C:\Windows\System32\Config\SAM
-#
-# Glob paths leverage glob patterns specified at
-# `https://github.com/dazinator/DotNet.Glob`. This is faster than RegEx and
-# should be favored unless more complex patterns are required. Useful for
-# scanning for files by name or extension recursively. Also useful for
-# collecting a folder recursively.
-#
-glob    **\malware.exe
-#
+
+static	C:\Windows\System32\Config\SAM
+
+# Glob paths leverage glob patterns specified at `https://github.com/gobwas/glob`. 
+# This is faster than RegEx and should be favored unless more complex patterns
+# are required. Useful for scanning for files by name or extension recursively.
+# Also useful for collecting a folder recursively.
+
+glob	**\malware.exe
+
 # Regex paths leverage the Go Regex capabilities and will search for
 # specified patterns across accessible files. This is the slowest option and
 # should be saved for unique use cases that are not supported by globbing.
-#
-regex   .*\Windows\Temp\[a-z]{8}\+*
+
+regex	.*\Windows\Temp\[a-z]{8}\+*
 ```
 
 This can then be supplied to donald for a custom collection of just these paths:
@@ -350,28 +345,17 @@ This can then be supplied to donald for a custom collection of just these paths:
 ```text
 donald.exe -c custom.txt --replace-paths=true
 ```
-
-### Collection of custom paths in addition to the default paths
+Collection of custom paths in addition to the default paths:
 
 ```text
 donald -c custom.txt --replace-paths=false
 ```
 
-## Custom collection paths
-
-Donald allows for the specification of custom collection paths with the use of
-a configuration file provided after `-c` at the command line. A summary of the format is below, though full details are available within the `CUSTOM_PATH_TEMPLATE.txt` provided in the repository.
-
-The custom collection path file allows for the specification of files to collect
-from a target system. The format is tab-delimited, where the first field is a
-pattern type indicator and the second field is the pattern to collect.
+The custom collection path file allows for the specification of files to collect from a target system. The format is tab-delimited, where the first field is a pattern type indicator and the second field is the pattern to collect.
 
 * **NOTE**: As previously mentioned, all collection paths are case-insensitive.
-* **NOTE**: The path specifier needs to match the platform you are collecting
-  from. For Windows, it must be `\`, and `/` for macOS and Linux.
-* **NOTE**: You must use tabs to delimit the patterns. Spaces will not
-  work. This means that spaces are allowed in the second field containing
-  pattern content
+* **NOTE**: The path specifier needs to match the platform you are collecting from. For Windows, it must be `\`, and `/` for macOS and Linux.
+* **NOTE**: You must use tabs to delimit the patterns. Spaces will not work. This means that spaces are allowed in the second field containing pattern content
 
 ### Pattern Types
 
@@ -380,30 +364,30 @@ There are 4 pattern types, summarized below:
 * static
   * This format allows for the specification of a specific file at a known path.
   * This is the fastest pattern type, as it is performing a string comparison.
-  * Example: `static    C:\Windows\System32\config\SAM`
+  * Example: `static	C:\Windows\System32\config\SAM`
 * glob
   * This format allows the specification of basic patterns. Most commonly used
     to collect the contents of a folder, even recursively. Has a few common
     implementations, demonstrated in the examples below.
   * While not as fast as static paths, it allows for some common pattern
     matching and is faster than leveraging regular expressions.
-  * Example: `glob    C:\Users\*\ntuser.dat` - collects the NTUser.dat from each user.
-  * Example: `glob    C:\**\malware.exe` - collects files named `malware.exe`
+  * Example: `glob	C:\Users\*\ntuser.dat` - collects the NTUser.dat from each user.
+  * Example: `glob	C:\**\malware.exe` - collects files named `malware.exe`
     regardless of what folder they are in, recursively.
-  * Example: `glob    C:\Users\*\AppData\Microsoft\Windows\Recent\*.lnk` -
+  * Example: `glob	C:\Users\*\AppData\Microsoft\Windows\Recent\*.lnk` -
     collects all files ending with `.lnk`
-  * Example: `glob    **\*malware*` - collects all files recursively.
+  * Example: `glob	**\*malware*` - collects all files recursively.
 * regex
   * Allows the specification of advanced patterns through Go's regular
     expression implementation.
-  * Example: `regex    C:\[0-9]+.exe` - collect all numeric-only executables in
+  * Example: `regex	C:\[0-9]+.exe` - collect all numeric-only executables in
     the root of the `C:\` drive.
 * force
   * Same as the static option, though will attempt collection even if the file
     is not identified in the file enumeration process.
   * This is useful in the collection of alternate data streams and special
     files not generally exposed to directory traversal functions.
-  * Example: `force    C:\$Extend\$UsnJrnl:$J`
+  * Example: `force	C:\$Extend\$UsnJrnl:$J`
 
 ## Building
 

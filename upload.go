@@ -82,7 +82,7 @@ func UploadDagobert(cfg Configuration) error {
 		return err
 	}
 
-	dst, err := url.JoinPath(cfg.DagobertAddr, "/cases/", cfg.DagobertCase, "/evidences/")
+	dst, err := url.JoinPath(cfg.DagobertAddr, "/cases/", cfg.DagobertCase, "/evidences/new")
 	if err != nil {
 		return err
 	}

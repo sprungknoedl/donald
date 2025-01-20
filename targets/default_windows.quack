@@ -3,7 +3,7 @@ force	C:\$LogFile
 force	C:\$MFT
 force	C:\$Extend\$UsnJrnl:$J
 
-// == static matchers
+# == static matchers
 static	Windows\SchedLgU.Txt
 static	Windows\inf\setupapi.dev.log
 static	Windows\System32\drivers\etc\hosts
@@ -20,7 +20,7 @@ static	Windows\System32\config\SYSTEM.LOG2
 static	Windows\System32\config\SOFTWARE.LOG2
 static	Windows\System32\config\SECURITY.LOG2
 
-// == glob matchers
+# == glob matchers
 glob	Windows\Tasks\**
 glob	Windows\Prefetch\**
 glob	Windows\System32\sru\**
@@ -48,4 +48,4 @@ glob	Users\*\AppData\Roaming\Mozilla\Firefox\Profiles\**
 glob	Users\*\AppData\Local\ConnectedDevicesPlatform\**
 glob	Users\*\AppData\Local\Microsoft\Windows\Explorer\**
 
-// == regexp matchers
+# == regexp matchers

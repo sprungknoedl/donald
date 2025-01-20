@@ -105,7 +105,14 @@ func step1TraverseFS(cfg Configuration) ([]string, error) {
 	InfoLogger.Println("Stage 1: Traversing file tree ...")
 	start := time.Now()
 
-	paths, err := GetPaths(cfg)
+	var paths []string
+	var err error
+	if cfg.RawAccess {
+		paths, err = GetPathsRaw(cfg)
+	} else {
+		paths, err = GetPaths(cfg)
+	}
+
 	if err != nil {
 		return nil, err
 	}

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"www.velocidex.com/golang/go-ntfs/parser"
 
@@ -22,6 +24,70 @@ func DefaulRootPaths() []string {
 	}
 }
 
+func GetPathsRaw(cfg Configuration) ([]string, error) {
+	scanned := 0
+	matchers, paths, err := LoadMatchers(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("load matchers: %w", err)
+	}
+
+	roots := cfg.CollectionRoots
+	if len(roots) == 0 {
+		roots = DefaulRootPaths()
+	}
+
+	for _, root := range roots {
+		driveLetter := filepath.VolumeName(root)
+		fd, err := os.Open("\\\\.\\" + driveLetter)
+		if err != nil {
+			return nil, fmt.Errorf("open drive: %s: %w", root, err)
+		}
+
+		defer fd.Close()
+		drive := NewSectorReaderAt(fd, 512)
+		ntfs, err := parser.GetNTFSContext(drive, 0)
+		if err != nil {
+			return nil, fmt.Errorf("get ntfs context: %w", err)
+		}
+
+		mft, err := ntfs.GetMFT(5)
+		if err != nil {
+			return nil, fmt.Errorf("get mft 5: %w", err)
+		}
+
+		mft, err = mft.Open(ntfs, "")
+		if err != nil {
+			return nil, fmt.Errorf("open mft: %w", err)
+		}
+
+		err = walkDirRaw(ntfs, root, mft, func(path string, info *parser.FileInfo, err error) error {
+			if err != nil {
+				WarnLogger.Printf("traverse | %v", err)
+				return fs.SkipDir
+			}
+
+			scanned++
+			pathTrimmed := strings.TrimPrefix(path, root)
+			if !info.IsDir {
+				for _, match := range matchers {
+					if match(path) || match(pathTrimmed) {
+						paths = append(paths, path)
+						break
+					}
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			return paths, err
+		}
+	}
+
+	InfoLogger.Printf("traverse | scanned %d paths, resulted in %d files to collect", scanned, len(paths))
+	return paths, err
+}
+
 func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) error {
 	rel, err := filepath.Rel(filepath.VolumeName(path)+"/", filepath.ToSlash(path))
 	if err != nil {
@@ -34,6 +100,7 @@ func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) error {
 		return fmt.Errorf("open drive: %s: %w", path, err)
 	}
 
+	defer fd.Close()
 	drive := NewSectorReaderAt(fd, 512)
 	ntfsCtx, err := parser.GetNTFSContext(drive, 0)
 	if err != nil {
@@ -102,4 +169,38 @@ func roundUp(num int, multiple int) int {
 	}
 
 	return num + multiple - remainder
+}
+
+func walkDirRaw(ctx *parser.NTFSContext, path string, mft *parser.MFT_ENTRY, walkDirFn func(path string, d *parser.FileInfo, err error) error) error {
+	fi := parser.Stat(ctx, mft)[0]
+	if err := walkDirFn(path, fi, nil); err != nil || !fi.IsDir {
+		if err == fs.SkipDir && fi.IsDir {
+			// Successfully skipped directory.
+			err = nil
+		}
+		return err
+	}
+
+	records := mft.Dir(ctx)
+	for _, r1 := range records {
+		path1 := filepath.Join(path, r1.File().Name())
+		if r1.File().Name() == "" || path == path1 {
+			// avoid infite loop
+			continue
+		}
+
+		mft1, err := ctx.GetMFT(int64(r1.MftReference()))
+		if err != nil {
+			return err
+		}
+
+		if err := walkDirRaw(ctx, path1, mft1, walkDirFn); err != nil {
+			if err == fs.SkipDir {
+				break
+			}
+			return err
+		}
+	}
+
+	return nil
 }

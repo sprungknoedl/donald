@@ -31,11 +31,6 @@ all:
 	GOOS=windows GOARCH=arm64 go build -o donald-windows-arm64.exe
 
 clean:
-	rm donald-linux-amd64
-	rm donald-linux-arm
-	rm donald-linux-arm64
-	rm donald-mac-amd64
-	rm donald-mac-arm64
-	rm donald-windows-amd64.exe
-	rm donald-windows-arm.exe
-	rm donald-windows-arm64.exe
+	rm -f donald-linux-amd64 donald-linux-arm donald-linux-arm64 \
+		donald-mac-amd64 donald-mac-arm64 \
+		donald-windows-amd64.exe donald-windows-arm.exe donald-windows-arm64.exe

@@ -1,4 +1,24 @@
-.PHONY: all clean
+.PHONY: build check fmt vet test all clean
+
+build:
+	go build -o donald
+
+# Canonical verification: run this (and CI runs it) before trusting a change.
+check: build vet test
+	@unformatted=$$(gofmt -l .); \
+	if [ -n "$$unformatted" ]; then \
+		echo "gofmt needed on:"; echo "$$unformatted"; exit 1; \
+	fi
+	@echo "✓ check passed"
+
+fmt:
+	gofmt -w $$(find . -name '*.go')
+
+vet:
+	go vet ./...
+
+test:
+	go test ./...
 
 all:
 	GOOS=linux GOARCH=amd64 go build -o donald-linux-amd64

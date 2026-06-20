@@ -57,21 +57,44 @@ func LoadMatchers(cfg Configuration) ([]Matcher, []string, error) {
 	}
 }
 
-func GetPaths(cfg Configuration) ([]CollectTarget, error) {
-	scanned := 0
+// loadTargetsAndRoots performs the shared prologue of both traversal codepaths:
+// it loads the matchers, seeds the target list with the unconditional `force`
+// paths, and resolves the collection roots (falling back to the platform default).
+func loadTargetsAndRoots(cfg Configuration) (matchers []Matcher, targets []CollectTarget, roots []string, err error) {
 	matchers, forced, err := LoadMatchers(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("load matchers: %w", err)
+		return nil, nil, nil, fmt.Errorf("load matchers: %w", err)
 	}
 
-	var targets []CollectTarget
 	for _, p := range forced {
 		targets = append(targets, CollectTarget{Path: p, Source: "force"})
 	}
 
-	roots := cfg.CollectionRoots
+	roots = cfg.CollectionRoots
 	if len(roots) == 0 {
 		roots = DefaulRootPaths()
+	}
+
+	return matchers, targets, roots, nil
+}
+
+// appendIfMatch tests path (and its root-trimmed form) against every matcher and
+// appends a "match" target on the first hit. Shared by the normal and raw walks.
+func appendIfMatch(targets []CollectTarget, matchers []Matcher, path, root string) []CollectTarget {
+	pathTrimmed := strings.TrimPrefix(path, root)
+	for _, match := range matchers {
+		if match(path) || match(pathTrimmed) {
+			return append(targets, CollectTarget{Path: path, Source: "match"})
+		}
+	}
+	return targets
+}
+
+func GetPaths(cfg Configuration) ([]CollectTarget, error) {
+	scanned := 0
+	matchers, targets, roots, err := loadTargetsAndRoots(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, root := range roots {
@@ -82,17 +105,9 @@ func GetPaths(cfg Configuration) ([]CollectTarget, error) {
 				return fs.SkipDir
 			}
 
-			pathTrimmed := strings.TrimPrefix(path, root)
-			// InfoLogger.Printf("traverse | trimmed path: %s -> %s", path, pathTrimmed)
-
 			scanned++
 			if !info.IsDir() {
-				for _, match := range matchers {
-					if match(path) || match(pathTrimmed) {
-						targets = append(targets, CollectTarget{Path: path, Source: "match"})
-						break
-					}
-				}
+				targets = appendIfMatch(targets, matchers, path, root)
 			}
 
 			return nil
@@ -117,6 +132,18 @@ func archiveEntry(cfg Configuration, archive *zip.Writer, name string) (io.Write
 		return archive.Encrypt(name, cfg.ZipPass, zip.AES256Encryption)
 	}
 	return archive.Create(name)
+}
+
+// newHashers returns a writer feeding both a SHA-256 and an MD5 hasher and a
+// finish func returning their hex digests. Collection tees the source→archive
+// copy through the writer so the digests cover the plaintext source bytes with
+// no extra read.
+func newHashers() (w io.Writer, finish func() (sha256sum, md5sum string)) {
+	h256 := sha256.New()
+	hmd5 := md5.New()
+	return io.MultiWriter(h256, hmd5), func() (string, string) {
+		return hex.EncodeToString(h256.Sum(nil)), hex.EncodeToString(hmd5.Sum(nil))
+	}
 }
 
 func CollectFile(cfg Configuration, archive *zip.Writer, path string) (string, int64, string, string, error) {
@@ -154,12 +181,12 @@ func CollectFile(cfg Configuration, archive *zip.Writer, path string) (string, i
 
 	// Tee the source→archive copy through the hashers: digests cover the
 	// plaintext source bytes, with no extra read. size is the bytes streamed.
-	h256 := sha256.New()
-	hmd5 := md5.New()
-	size, err := io.Copy(io.MultiWriter(w, h256, hmd5), r)
+	hashes, digests := newHashers()
+	size, err := io.Copy(io.MultiWriter(w, hashes), r)
 	if err != nil {
 		return rel, 0, "", "", err
 	}
 
-	return rel, size, hex.EncodeToString(h256.Sum(nil)), hex.EncodeToString(hmd5.Sum(nil)), nil
+	sha256sum, md5sum := digests()
+	return rel, size, sha256sum, md5sum, nil
 }

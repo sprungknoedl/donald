@@ -44,6 +44,17 @@ type MKape struct {
 	} `yaml:"Processors"`
 }
 
+// kapeKey normalizes a KAPE target name to its map key: the lowercased base
+// filename with the .tkape extension stripped. This mirrors KAPE, which
+// addresses targets by name without the extension. It is used to index the
+// available targets and to normalize nested `.tkape` references (which carry
+// the extension, and may include a subdirectory) before lookup. The
+// command-line `-kt` name is looked up as-is and must be extensionless.
+func kapeKey(name string) string {
+	base := filepath.Base(name)
+	return strings.ToLower(strings.TrimSuffix(base, ".tkape"))
+}
+
 func ParseKapeTargets(target string, dir string) ([]Matcher, []string, error) {
 	targets := map[string]string{}
 	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -51,7 +62,7 @@ func ParseKapeTargets(target string, dir string) ([]Matcher, []string, error) {
 			return nil
 		}
 
-		targets[strings.ToLower(filepath.Base(path))] = path
+		targets[kapeKey(path)] = path
 		return nil
 	})
 
@@ -76,7 +87,7 @@ func convert(targets map[string]string, name string) ([]Matcher, []string, error
 	for _, t := range tkape.Targets {
 		switch {
 		case strings.HasSuffix(t.Path, ".tkape"):
-			m, p, err := convert(targets, t.Path)
+			m, p, err := convert(targets, kapeKey(t.Path))
 			if err != nil {
 				return nil, nil, err
 			}

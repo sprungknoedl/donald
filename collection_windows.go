@@ -1,16 +1,12 @@
 package main
 
 import (
-	"crypto/md5"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	zip "github.com/yeka/zip"
 	"www.velocidex.com/golang/go-ntfs/parser"
@@ -29,19 +25,9 @@ func DefaulRootPaths() []string {
 
 func GetPathsRaw(cfg Configuration) ([]CollectTarget, error) {
 	scanned := 0
-	matchers, forced, err := LoadMatchers(cfg)
+	matchers, targets, roots, err := loadTargetsAndRoots(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("load matchers: %w", err)
-	}
-
-	var targets []CollectTarget
-	for _, p := range forced {
-		targets = append(targets, CollectTarget{Path: p, Source: "force"})
-	}
-
-	roots := cfg.CollectionRoots
-	if len(roots) == 0 {
-		roots = DefaulRootPaths()
+		return nil, err
 	}
 
 	for _, root := range roots {
@@ -76,14 +62,8 @@ func GetPathsRaw(cfg Configuration) ([]CollectTarget, error) {
 			}
 
 			scanned++
-			pathTrimmed := strings.TrimPrefix(path, root)
 			if !info.IsDir {
-				for _, match := range matchers {
-					if match(path) || match(pathTrimmed) {
-						targets = append(targets, CollectTarget{Path: path, Source: "match"})
-						break
-					}
-				}
+				targets = appendIfMatch(targets, matchers, path, root)
 			}
 
 			return nil
@@ -129,8 +109,7 @@ func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) (string
 
 	// Tap the digests off the streaming read: hash the source bytes as they
 	// are written to the archive, with no second read.
-	h256 := sha256.New()
-	hmd5 := md5.New()
+	hashes, digests := newHashers()
 	buf := make([]byte, 1024*1024*10)
 	offset := int64(0)
 	size := int64(0)
@@ -138,7 +117,8 @@ func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) (string
 		n, err := r.ReadAt(buf, offset)
 		if n == 0 || err != nil {
 			if err == nil || errors.Is(err, io.EOF) {
-				return rel, size, hex.EncodeToString(h256.Sum(nil)), hex.EncodeToString(hmd5.Sum(nil)), nil
+				sha256sum, md5sum := digests()
+				return rel, size, sha256sum, md5sum, nil
 			}
 			return rel, 0, "", "", fmt.Errorf("read from disk: %w", err)
 		}
@@ -147,8 +127,7 @@ func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) (string
 		if err != nil {
 			return rel, 0, "", "", fmt.Errorf("write to archive: %w", err)
 		}
-		h256.Write(buf[:n])
-		hmd5.Write(buf[:n])
+		hashes.Write(buf[:n])
 		size += int64(n)
 
 		offset += int64(n)

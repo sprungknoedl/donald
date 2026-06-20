@@ -44,5 +44,9 @@ func ParseQuack(r io.Reader) ([]Matcher, []string, error) {
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		return nil, nil, err
+	}
+
 	return m, paths, nil
 }

@@ -21,6 +21,8 @@ can collect locked, in-use, and special system files that the Windows API won't 
   [Dagobert](https://github.com/sprungknoedl/dagobert) case-management instance.
 * **Self-documenting archives.** Every archive carries a `_donald/` folder with a
   manifest, a log, and checksums of everything collected.
+* **Hash sidecar.** Every archive ships with a `<archive>.sha256` companion so the
+  receiver can verify the file arrived intact with `sha256sum -c`.
 
 ## How it works
 
@@ -78,6 +80,22 @@ Alongside the collected evidence, each archive holds a `_donald/` folder that do
 
 After extracting, you can run `sha256sum` or `md5sum` against `sha256sums.txt` or
 `md5sums.txt` to confirm the contents are intact.
+
+## Verifying the archive
+
+Next to every archive donald writes a `<archive>.sha256` sidecar — the SHA-256 of the
+final archive bytes in `sha256sum` format. It attests to the *stored* container, so it
+verifies the file in transit (SFTP, removable media, Dagobert) without opening it:
+
+```sh
+# in the directory holding both files
+sha256sum -c <hostname>-<timestamp>.zip.sha256
+# => <hostname>-<timestamp>.zip: OK
+```
+
+The digest is taken over the bytes on disk, so when `-zip-pass` is set it covers the
+encrypted archive — checkable without the password. On SFTP the sidecar is uploaded
+alongside the archive; on Dagobert the digest is sent as a `Hash` field.
 
 ## Build
 

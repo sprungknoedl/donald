@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -79,17 +81,17 @@ func main() {
 		ErrLogger.Fatalf("Stage 1: Unrecoverable error: %v", err)
 	}
 
-	err = step2CollectFiles(cfg, paths)
+	sum, err := step2CollectFiles(cfg, paths)
 	if err != nil {
 		ErrLogger.Fatalf("Stage 2: Unrecoverable error: %v", err)
 	}
 
-	err = step3UploadSFTP(cfg)
+	err = step3UploadSFTP(cfg, sum)
 	if err != nil {
 		ErrLogger.Fatalf("Stage 3 (SFTP): Unrecoverable error: %v", err)
 	}
 
-	err = step3UploadDagobert(cfg)
+	err = step3UploadDagobert(cfg, sum)
 	if err != nil {
 		ErrLogger.Fatalf("Stage 3 (Dagobert): Unrecoverable error: %v", err)
 	}
@@ -133,10 +135,10 @@ func step1TraverseFS(cfg Configuration) ([]CollectTarget, error) {
 
 // step2CollectFiles collects files based on the provided file paths, creates a zip archive,
 // and logs the progress.
-func step2CollectFiles(cfg Configuration, paths []CollectTarget) error {
+func step2CollectFiles(cfg Configuration, paths []CollectTarget) (string, error) {
 	if cfg.SkipCollection {
 		InfoLogger.Println("Stage 2: Collecting files skipped.")
-		return nil
+		return "", nil
 	}
 
 	// Log the start of Stage 2
@@ -150,11 +152,14 @@ func step2CollectFiles(cfg Configuration, paths []CollectTarget) error {
 	// Create the output file for the zip archive
 	fh, err := os.Create(filepath.Join(cfg.OutputDir, cfg.OutputFile))
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	// Create a zip archive
-	archive := zip.NewWriter(fh)
+	// Tee every byte written to the archive into a SHA-256 hasher so we can
+	// emit a sidecar attesting to the final (post-compression, post-encryption)
+	// bytes on disk without re-reading the archive.
+	h := sha256.New()
+	archive := zip.NewWriter(io.MultiWriter(fh, h))
 
 	// Release any cached raw-volume handles when the stage ends, even on a
 	// mid-stage fatal error (no-op off Windows).
@@ -188,17 +193,34 @@ func step2CollectFiles(cfg Configuration, paths []CollectTarget) error {
 	// Close the zip archive
 	err = archive.Close()
 	if err != nil {
-		return err
+		return "", err
+	}
+	fh.Close()
+
+	// Write the hash sidecar next to the archive. Non-fatal: a sidecar failure
+	// degrades verifiability but the evidence archive itself is intact.
+	sum := hex.EncodeToString(h.Sum(nil))
+	if err := writeSidecar(cfg, sum); err != nil {
+		WarnLogger.Printf("Stage 2: Failed to write hash sidecar: %v", err)
 	}
 
 	// Log the completion of Stage 2 along with the elapsed time
 	InfoLogger.Printf("Stage 2 finished in %v", time.Since(start))
-	return nil
+	return sum, nil
+}
+
+// writeSidecar writes a sha256sum-compatible companion file
+// <OutputDir>/<OutputFile>.sha256 holding the digest of the final archive
+// bytes against the archive's basename, verifiable with `sha256sum -c`.
+func writeSidecar(cfg Configuration, sum string) error {
+	line := fmt.Sprintf("%s  %s\n", sum, filepath.Base(cfg.OutputFile))
+	path := filepath.Join(cfg.OutputDir, cfg.OutputFile+".sha256")
+	return os.WriteFile(path, []byte(line), 0644)
 }
 
 // step3UploadSFTP uploads the zip archive to an SFTP server (if configured)
 // and logs the progress.
-func step3UploadSFTP(cfg Configuration) error {
+func step3UploadSFTP(cfg Configuration, sum string) error {
 	// Check if SFTP address is empty, if so, skip the upload
 	if cfg.SkipUpload || cfg.SftpAddr == "" {
 		InfoLogger.Println("Stage 3: Uploading archive to SFTP skipped.")
@@ -210,7 +232,7 @@ func step3UploadSFTP(cfg Configuration) error {
 	start := time.Now()
 
 	// Upload the zip archive to the SFTP server
-	err := UploadSFTP(cfg)
+	err := UploadSFTP(cfg, sum)
 	if err != nil {
 		return err
 	}
@@ -222,7 +244,7 @@ func step3UploadSFTP(cfg Configuration) error {
 
 // step3UploadDagobert uploads the zip archive to an Dagobert server (if configured)
 // and logs the progress.
-func step3UploadDagobert(cfg Configuration) error {
+func step3UploadDagobert(cfg Configuration, sum string) error {
 	// Check if Dagobert address is empty, if so, skip the upload
 	if cfg.SkipUpload || cfg.DagobertAddr == "" {
 		InfoLogger.Println("Stage 3: Uploading archive to Dagobert skipped.")
@@ -234,7 +256,7 @@ func step3UploadDagobert(cfg Configuration) error {
 	start := time.Now()
 
 	// Upload the zip archive to the SFTP server
-	err := UploadDagobert(cfg)
+	err := UploadDagobert(cfg, sum)
 	if err != nil {
 		return err
 	}
@@ -261,6 +283,9 @@ func step4CleanUp(cfg Configuration) error {
 	if err != nil {
 		return err
 	}
+
+	// Remove the hash sidecar alongside the archive (best-effort).
+	os.Remove(filepath.Join(cfg.OutputDir, cfg.OutputFile+".sha256"))
 
 	// Log the completion of Stage 4 along with the elapsed time
 	InfoLogger.Printf("Stage 4  finished in %v", time.Since(start))

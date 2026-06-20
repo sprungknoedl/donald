@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -13,8 +14,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// UploadSFTP performs an SFTP upload using the provided configuration.
-func UploadSFTP(cfg Configuration) error {
+// UploadSFTP performs an SFTP upload using the provided configuration. sum is
+// the SHA-256 hex digest of the archive, uploaded as a sidecar alongside it.
+func UploadSFTP(cfg Configuration, sum string) error {
 	// Establish an SSH connection to the SFTP server
 	conn, err := ssh.Dial("tcp", cfg.SftpAddr, &ssh.ClientConfig{
 		User:            cfg.SftpUser,
@@ -45,12 +47,34 @@ func UploadSFTP(cfg Configuration) error {
 	defer src.Close()
 
 	// Copy the content of the local file to the SFTP server
-	_, err = io.Copy(dst, src)
-	return err
+	if _, err = io.Copy(dst, src); err != nil {
+		return err
+	}
+
+	// Upload the hash sidecar alongside the archive. Its body is regenerated
+	// from the digest so the embedded filename matches the remote archive name
+	// (which may differ from the local one via -sftp-file). A failure here is
+	// logged but does not fail the run.
+	if sum != "" {
+		body := fmt.Sprintf("%s  %s\n", sum, filepath.Base(cfg.SftpFile))
+		sdst, err := client.OpenFile(filepath.Join(cfg.SftpDir, cfg.SftpFile+".sha256"), os.O_WRONLY|os.O_TRUNC|os.O_CREATE)
+		if err != nil {
+			WarnLogger.Printf("Stage 3 (SFTP): Failed to upload hash sidecar: %v", err)
+			return nil
+		}
+		if _, err := sdst.Write([]byte(body)); err != nil {
+			WarnLogger.Printf("Stage 3 (SFTP): Failed to upload hash sidecar: %v", err)
+		}
+		sdst.Close()
+	}
+
+	return nil
 }
 
-// UploadDagobert performs an upload to a Dagobert instance using the provided configuration.
-func UploadDagobert(cfg Configuration) error {
+// UploadDagobert performs an upload to a Dagobert instance using the provided
+// configuration. sum is the SHA-256 hex digest of the archive, sent as a Hash
+// field so the server can verify the upload.
+func UploadDagobert(cfg Configuration, sum string) error {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
@@ -61,6 +85,7 @@ func UploadDagobert(cfg Configuration) error {
 	writer.WriteField("Type", "Triage")
 	writer.WriteField("Name", cfg.DagobertFile)
 	writer.WriteField("Source", hostname)
+	writer.WriteField("Hash", sum)
 	if cfg.ZipPass != "" {
 		writer.WriteField("Password", cfg.ZipPass)
 	}

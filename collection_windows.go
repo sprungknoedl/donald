@@ -1,10 +1,7 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -23,51 +20,44 @@ func DefaulRootPaths() []string {
 	}
 }
 
+// openNTFSVolume opens the raw volume backing root (e.g. \\.\C:) and builds an
+// NTFS context over it. This is the only genuinely Windows-specific step of the
+// raw codepath; everything downstream is platform-independent (see ntfs.go).
+// The returned closer must be called to release the device handle.
+func openNTFSVolume(root string) (*parser.NTFSContext, func() error, error) {
+	driveLetter := filepath.VolumeName(root)
+	fd, err := os.Open("\\\\.\\" + driveLetter)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open drive: %s: %w", root, err)
+	}
+
+	drive := NewSectorReaderAt(fd, 512)
+	ntfs, err := parser.GetNTFSContext(drive, 0)
+	if err != nil {
+		fd.Close()
+		return nil, nil, fmt.Errorf("get ntfs context: %w", err)
+	}
+
+	return ntfs, fd.Close, nil
+}
+
 func GetPathsRaw(cfg Configuration) ([]CollectTarget, error) {
-	scanned := 0
 	matchers, targets, roots, err := loadTargetsAndRoots(cfg)
 	if err != nil {
 		return nil, err
 	}
 
+	scanned := 0
 	for _, root := range roots {
-		driveLetter := filepath.VolumeName(root)
-		fd, err := os.Open("\\\\.\\" + driveLetter)
+		ntfs, closeVol, err := openNTFSVolume(root)
 		if err != nil {
-			return nil, fmt.Errorf("open drive: %s: %w", root, err)
+			return nil, err
 		}
 
-		defer fd.Close()
-		drive := NewSectorReaderAt(fd, 512)
-		ntfs, err := parser.GetNTFSContext(drive, 0)
-		if err != nil {
-			return nil, fmt.Errorf("get ntfs context: %w", err)
-		}
-
-		mft, err := ntfs.GetMFT(5)
-		if err != nil {
-			return nil, fmt.Errorf("get mft 5: %w", err)
-		}
-
-		mft, err = mft.Open(ntfs, "")
-		if err != nil {
-			return nil, fmt.Errorf("open mft: %w", err)
-		}
-
-		err = walkDirRaw(ntfs, root, mft, func(path string, info *parser.FileInfo, err error) error {
-			if err != nil {
-				WarnLogger.Printf("traverse | %v", err)
-				Jrnl.RecordDirSkipped(path, err)
-				return fs.SkipDir
-			}
-
-			scanned++
-			if !info.IsDir {
-				targets = appendIfMatch(targets, matchers, path, root)
-			}
-
-			return nil
-		})
+		var n int
+		targets, n, err = walkNTFS(ntfs, root, matchers, targets)
+		scanned += n
+		closeVol()
 		if err != nil {
 			return targets, err
 		}
@@ -75,7 +65,7 @@ func GetPathsRaw(cfg Configuration) ([]CollectTarget, error) {
 
 	Jrnl.SetScanned(scanned)
 	InfoLogger.Printf("traverse | scanned %d paths, resulted in %d files to collect", scanned, len(targets))
-	return targets, err
+	return targets, nil
 }
 
 func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) (string, int64, string, string, error) {
@@ -84,120 +74,11 @@ func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) (string
 		return "", 0, "", "", err
 	}
 
-	driveLetter := filepath.VolumeName(path)
-	fd, err := os.Open("\\\\.\\" + driveLetter)
+	ntfs, closeVol, err := openNTFSVolume(filepath.VolumeName(path))
 	if err != nil {
-		return rel, 0, "", "", fmt.Errorf("open drive: %s: %w", path, err)
+		return rel, 0, "", "", err
 	}
+	defer closeVol()
 
-	defer fd.Close()
-	drive := NewSectorReaderAt(fd, 512)
-	ntfsCtx, err := parser.GetNTFSContext(drive, 0)
-	if err != nil {
-		return rel, 0, "", "", fmt.Errorf("get ntfs context: %w", err)
-	}
-
-	r, err := parser.GetDataForPath(ntfsCtx, rel)
-	if err != nil {
-		return rel, 0, "", "", fmt.Errorf("get data stream: %w", err)
-	}
-
-	fh, err := archiveEntry(cfg, archive, rel)
-	if err != nil {
-		return rel, 0, "", "", fmt.Errorf("add file to archive: %w", err)
-	}
-
-	// Tap the digests off the streaming read: hash the source bytes as they
-	// are written to the archive, with no second read.
-	hashes, digests := newHashers()
-	buf := make([]byte, 1024*1024*10)
-	offset := int64(0)
-	size := int64(0)
-	for {
-		n, err := r.ReadAt(buf, offset)
-		if n == 0 || err != nil {
-			if err == nil || errors.Is(err, io.EOF) {
-				sha256sum, md5sum := digests()
-				return rel, size, sha256sum, md5sum, nil
-			}
-			return rel, 0, "", "", fmt.Errorf("read from disk: %w", err)
-		}
-
-		_, err = fh.Write(buf[:n])
-		if err != nil {
-			return rel, 0, "", "", fmt.Errorf("write to archive: %w", err)
-		}
-		hashes.Write(buf[:n])
-		size += int64(n)
-
-		offset += int64(n)
-	}
-}
-
-type SectorReaderAt struct {
-	r          io.ReaderAt
-	sectorSize int
-}
-
-func NewSectorReaderAt(r io.ReaderAt, sectorSize int) *SectorReaderAt {
-	return &SectorReaderAt{r: r, sectorSize: sectorSize}
-}
-
-func (r *SectorReaderAt) ReadAt(p []byte, off int64) (int, error) {
-	sector := int(off) / r.sectorSize
-	sectorOff := int64(sector) * int64(r.sectorSize)
-	misalignment := int(off) % r.sectorSize
-	size := roundUp(len(p)+int(misalignment), r.sectorSize)
-
-	buf := make([]byte, size)
-	n, err := r.r.ReadAt(buf, sectorOff)
-	copy(p, buf[misalignment:])
-	return n, err
-}
-
-func roundUp(num int, multiple int) int {
-	if multiple == 0 {
-		return num
-	}
-
-	remainder := num % multiple
-	if remainder == 0 {
-		return num
-	}
-
-	return num + multiple - remainder
-}
-
-func walkDirRaw(ctx *parser.NTFSContext, path string, mft *parser.MFT_ENTRY, walkDirFn func(path string, d *parser.FileInfo, err error) error) error {
-	fi := parser.Stat(ctx, mft)[0]
-	if err := walkDirFn(path, fi, nil); err != nil || !fi.IsDir {
-		if err == fs.SkipDir && fi.IsDir {
-			// Successfully skipped directory.
-			err = nil
-		}
-		return err
-	}
-
-	records := mft.Dir(ctx)
-	for _, r1 := range records {
-		path1 := filepath.Join(path, r1.File().Name())
-		if r1.File().Name() == "" || path == path1 {
-			// avoid infite loop
-			continue
-		}
-
-		mft1, err := ctx.GetMFT(int64(r1.MftReference()))
-		if err != nil {
-			return err
-		}
-
-		if err := walkDirRaw(ctx, path1, mft1, walkDirFn); err != nil {
-			if err == fs.SkipDir {
-				break
-			}
-			return err
-		}
-	}
-
-	return nil
+	return collectFromNTFS(cfg, archive, ntfs, rel)
 }

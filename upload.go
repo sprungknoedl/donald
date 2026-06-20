@@ -61,6 +61,9 @@ func UploadDagobert(cfg Configuration) error {
 	writer.WriteField("Type", "Triage")
 	writer.WriteField("Name", cfg.DagobertFile)
 	writer.WriteField("Source", hostname)
+	if cfg.ZipPass != "" {
+		writer.WriteField("Password", cfg.ZipPass)
+	}
 	part, _ := writer.CreateFormFile("File", cfg.DagobertFile)
 
 	// Open the local file for reading

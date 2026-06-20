@@ -1,7 +1,7 @@
 package main
 
 import (
-	"archive/zip"
+	zip "github.com/yeka/zip"
 
 	_ "embed"
 )

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/zip"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	zip "github.com/yeka/zip"
 	"www.velocidex.com/golang/go-ntfs/parser"
 
 	_ "embed"
@@ -112,7 +112,12 @@ func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) error {
 		return fmt.Errorf("get data stream: %w", err)
 	}
 
-	fh, err := archive.Create(rel)
+	var fh io.Writer
+	if cfg.ZipPass != "" {
+		fh, err = archive.Encrypt(rel, cfg.ZipPass, zip.AES256Encryption)
+	} else {
+		fh, err = archive.Create(rel)
+	}
 	if err != nil {
 		return fmt.Errorf("add file to archive: %w", err)
 	}

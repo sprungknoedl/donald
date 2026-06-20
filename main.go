@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/zip"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	zip "github.com/yeka/zip"
 )
 
 // Loggers for different log levels
@@ -23,6 +24,7 @@ type Configuration struct {
 	OutputDir  string // Directory for the generated zip archive
 	OutputFile string // Name of the generated zip archive file
 	LogFile    string // Log file path
+	ZipPass    string // Password for the output zip archive (AES-256 if set)
 
 	SftpAddr string // SFTP server address
 	SftpUser string // SFTP server username
@@ -133,6 +135,10 @@ func step2CollectFiles(cfg Configuration, paths []string) error {
 	// Log the start of Stage 2
 	InfoLogger.Println("Stage 2: Collecting files ...")
 	start := time.Now()
+
+	if cfg.ZipPass != "" {
+		InfoLogger.Println("archive encryption enabled (AES-256)")
+	}
 
 	// Create the output file for the zip archive
 	fh, err := os.Create(filepath.Join(cfg.OutputDir, cfg.OutputFile))
@@ -253,6 +259,7 @@ func ParseConfig() (Configuration, error) {
 	// Set command line flags and default values
 	flag.StringVar(&cfg.OutputDir, "od", ".", "Defines the directory that the zip archive will be created in.")
 	flag.StringVar(&cfg.OutputFile, "of", hostname+"-"+now+".zip", "Defines the name of the zip archive created.")
+	flag.StringVar(&cfg.ZipPass, "zip-pass", "", "Password for the output zip archive. If set, the archive is AES-256 encrypted (WinZip AES). If empty, the archive is not encrypted.")
 
 	flag.StringVar(&cfg.SftpAddr, "sftp-addr", "", "SFTP server address")
 	flag.StringVar(&cfg.SftpUser, "sftp-user", "", "SFTP username")

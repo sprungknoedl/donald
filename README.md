@@ -48,7 +48,27 @@ Usage of ./donald:
         SFTP password
   -sftp-user string
         SFTP username
+  -zip-pass string
+        Password for the output zip archive. If set, the archive is AES-256 encrypted (WinZip AES). If empty, the archive is not encrypted.
 ```
+
+## Encrypted output
+
+By default the output archive is a plain `.zip`. If you pass `-zip-pass`, donald
+encrypts the archive on the host before it leaves, using per-entry **WinZip AES-256**
+(content is encrypted; filenames remain visible). The same encrypted file is what every
+downstream consumer receives — local disk, SFTP, and Dagobert.
+
+```sh
+# Encrypted — AES-256, password "S3cret!"
+donald -zip-pass 'S3cret!'
+```
+
+Recipients open the archive with any AES-zip-capable tool (7-Zip, WinZip, keka) by
+supplying the password. When uploading to Dagobert, the password is transmitted in the
+POST so Dagobert can decrypt the evidence; for SFTP, share the password out-of-band. Like
+`-sftp-pass`, a password passed on the command line is visible in the host process list
+and shell history.
 
 ## Default Collection Paths
 

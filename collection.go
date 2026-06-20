@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/zip"
 	"bytes"
 	"fmt"
 	"io"
@@ -12,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gobwas/glob"
+	zip "github.com/yeka/zip"
 )
 
 type Matcher func(string) bool
@@ -105,21 +105,29 @@ func CollectFile(cfg Configuration, archive *zip.Writer, path string) error {
 	}
 	defer r.Close()
 
-	fi, err := r.Stat()
-	if err != nil {
-		return err
-	}
+	var w io.Writer
+	if cfg.ZipPass != "" {
+		w, err = archive.Encrypt(rel, cfg.ZipPass, zip.AES256Encryption)
+		if err != nil {
+			return err
+		}
+	} else {
+		fi, err := r.Stat()
+		if err != nil {
+			return err
+		}
 
-	fh, err := zip.FileInfoHeader(fi)
-	if err != nil {
-		return err
-	}
+		fh, err := zip.FileInfoHeader(fi)
+		if err != nil {
+			return err
+		}
 
-	fh.Name = rel
-	fh.Method = zip.Deflate
-	w, err := archive.CreateHeader(fh)
-	if err != nil {
-		return err
+		fh.Name = rel
+		fh.Method = zip.Deflate
+		w, err = archive.CreateHeader(fh)
+		if err != nil {
+			return err
+		}
 	}
 
 	_, err = io.Copy(w, r)

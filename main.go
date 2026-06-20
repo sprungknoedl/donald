@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	zip "github.com/yeka/zip"
+	zip "github.com/sprungknoedl/zip"
 )
 
 // Loggers for different log levels

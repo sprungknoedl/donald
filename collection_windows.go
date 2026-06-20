@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	zip "github.com/yeka/zip"
+	zip "github.com/sprungknoedl/zip"
 	"www.velocidex.com/golang/go-ntfs/parser"
 
 	_ "embed"

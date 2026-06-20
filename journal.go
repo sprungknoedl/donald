@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"time"
 
-	zip "github.com/yeka/zip"
+	zip "github.com/sprungknoedl/zip"
 )
 
 // Version is the donald build version recorded in the manifest summary.
@@ -152,9 +152,13 @@ func targetsSource(cfg Configuration) string {
 // two coreutils checksum files _donald/sha256sums.txt and _donald/md5sums.txt.
 // A returned error is logged as WARN by the caller; the archive still closes.
 func (j *Journal) Flush(cfg Configuration, archive *zip.Writer) error {
+	// The _donald/ files are synthesized at flush time (no on-disk source), so
+	// they are all stamped with a single collection timestamp.
+	now := time.Now()
+
 	// _donald/collection.log — verbatim transcript of stages 1-2. Encrypted
 	// alongside the evidence when -zip-pass is set (it carries host paths/log lines).
-	w, err := archiveEntry(cfg, archive, "_donald/collection.log")
+	w, err := archiveEntry(cfg, archive, "_donald/collection.log", now)
 	if err != nil {
 		return err
 	}
@@ -163,7 +167,7 @@ func (j *Journal) Flush(cfg Configuration, archive *zip.Writer) error {
 	}
 
 	// _donald/manifest.jsonl — one JSON object per line, summary last.
-	w, err = archiveEntry(cfg, archive, "_donald/manifest.jsonl")
+	w, err = archiveEntry(cfg, archive, "_donald/manifest.jsonl", now)
 	if err != nil {
 		return err
 	}
@@ -211,7 +215,7 @@ func (j *Journal) Flush(cfg Configuration, archive *zip.Writer) error {
 	}
 
 	// _donald/sha256sums.txt — coreutils format, one line per collected file.
-	sha, err := archiveEntry(cfg, archive, "_donald/sha256sums.txt")
+	sha, err := archiveEntry(cfg, archive, "_donald/sha256sums.txt", now)
 	if err != nil {
 		return err
 	}
@@ -224,7 +228,7 @@ func (j *Journal) Flush(cfg Configuration, archive *zip.Writer) error {
 	}
 
 	// _donald/md5sums.txt — coreutils format, one line per collected file.
-	m, err := archiveEntry(cfg, archive, "_donald/md5sums.txt")
+	m, err := archiveEntry(cfg, archive, "_donald/md5sums.txt", now)
 	if err != nil {
 		return err
 	}

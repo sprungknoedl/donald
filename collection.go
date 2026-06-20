@@ -12,9 +12,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gobwas/glob"
-	zip "github.com/yeka/zip"
+	zip "github.com/sprungknoedl/zip"
 )
 
 // Matcher reports whether a path matches a collection target. Matching is
@@ -128,16 +129,23 @@ func GetPaths(cfg Configuration) ([]CollectTarget, error) {
 	return targets, err
 }
 
-// archiveEntry creates a zip entry named name, AES-256 encrypted when a
-// password is configured and a plain deflate entry otherwise. It is the single
-// place the encrypt-vs-plain decision lives, so evidence and `_donald/` metadata
-// are protected identically. (CollectFile's plain branch differs only in that it
-// preserves the source mod-time via FileInfoHeader.)
-func archiveEntry(cfg Configuration, archive *zip.Writer, name string) (io.Writer, error) {
-	if cfg.ZipPass != "" {
-		return archive.Encrypt(name, cfg.ZipPass, zip.AES256Encryption)
+// archiveEntry creates a deflate zip entry named name, stamped with modTime,
+// AES-256 encrypted when a password is configured and plain otherwise. It builds
+// the FileHeader directly (rather than the Encrypt/Create helpers) so the caller
+// can carry the source mod-time onto the entry even for encrypted output. It is
+// the single place the encrypt-vs-plain decision lives, so evidence and
+// `_donald/` metadata are protected identically.
+func archiveEntry(cfg Configuration, archive *zip.Writer, name string, modTime time.Time) (io.Writer, error) {
+	fh := &zip.FileHeader{
+		Name:     name,
+		Method:   zip.Deflate,
+		Modified: modTime,
 	}
-	return archive.Create(name)
+	if cfg.ZipPass != "" {
+		fh.SetPassword(cfg.ZipPass)
+		fh.SetEncryptionMethod(zip.AES256Encryption)
+	}
+	return archive.CreateHeader(fh)
 }
 
 // newHashers returns a writer feeding both a SHA-256 and an MD5 hasher and a
@@ -160,29 +168,29 @@ func CollectFile(cfg Configuration, archive *zip.Writer, path string) (string, i
 	}
 	defer r.Close()
 
-	var w io.Writer
+	// Build the entry header from the source FileInfo so it carries the file's
+	// mod-time and mode, then layer encryption on top when configured — so
+	// encrypted entries keep their mod-time too (a plain Encrypt() would drop it).
+	fi, err := r.Stat()
+	if err != nil {
+		return rel, 0, "", "", err
+	}
+
+	fh, err := zip.FileInfoHeader(fi)
+	if err != nil {
+		return rel, 0, "", "", err
+	}
+
+	fh.Name = rel
+	fh.Method = zip.Deflate
 	if cfg.ZipPass != "" {
-		w, err = archive.Encrypt(rel, cfg.ZipPass, zip.AES256Encryption)
-		if err != nil {
-			return rel, 0, "", "", err
-		}
-	} else {
-		fi, err := r.Stat()
-		if err != nil {
-			return rel, 0, "", "", err
-		}
+		fh.SetPassword(cfg.ZipPass)
+		fh.SetEncryptionMethod(zip.AES256Encryption)
+	}
 
-		fh, err := zip.FileInfoHeader(fi)
-		if err != nil {
-			return rel, 0, "", "", err
-		}
-
-		fh.Name = rel
-		fh.Method = zip.Deflate
-		w, err = archive.CreateHeader(fh)
-		if err != nil {
-			return rel, 0, "", "", err
-		}
+	w, err := archive.CreateHeader(fh)
+	if err != nil {
+		return rel, 0, "", "", err
 	}
 
 	// Tee the source→archive copy through the hashers: digests cover the

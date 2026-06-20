@@ -10,7 +10,7 @@ import (
 	"os"
 	"testing"
 
-	zip "github.com/yeka/zip"
+	zip "github.com/sprungknoedl/zip"
 	"www.velocidex.com/golang/go-ntfs/parser"
 )
 

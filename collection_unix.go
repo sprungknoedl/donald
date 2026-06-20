@@ -3,7 +3,7 @@
 package main
 
 import (
-	zip "github.com/yeka/zip"
+	zip "github.com/sprungknoedl/zip"
 )
 
 func DefaulRootPaths() []string {

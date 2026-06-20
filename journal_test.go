@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	zip "github.com/yeka/zip"
+	zip "github.com/sprungknoedl/zip"
 )
 
 func TestTargetsSource(t *testing.T) {

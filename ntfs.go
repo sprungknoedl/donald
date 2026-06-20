@@ -6,8 +6,10 @@ import (
 	"io"
 	"io/fs"
 	"path/filepath"
+	"strings"
+	"time"
 
-	zip "github.com/yeka/zip"
+	zip "github.com/sprungknoedl/zip"
 	"www.velocidex.com/golang/go-ntfs/parser"
 )
 
@@ -63,7 +65,7 @@ func collectFromNTFS(cfg Configuration, archive *zip.Writer, ntfs *parser.NTFSCo
 		return rel, 0, "", "", fmt.Errorf("get data stream: %w", err)
 	}
 
-	fh, err := archiveEntry(cfg, archive, rel)
+	fh, err := archiveEntry(cfg, archive, rel, ntfsMtime(ntfs, rel))
 	if err != nil {
 		return rel, 0, "", "", fmt.Errorf("add file to archive: %w", err)
 	}
@@ -92,6 +94,29 @@ func collectFromNTFS(cfg Configuration, archive *zip.Writer, ntfs *parser.NTFSCo
 
 		offset += int64(n)
 	}
+}
+
+// ntfsMtime resolves rel to its MFT entry and returns the file's
+// $STANDARD_INFORMATION modified time, so a raw-collected entry carries its real
+// on-disk timestamp rather than the archive-write time. Best-effort: any
+// resolution failure yields the zero time (the entry is written without a source
+// mod-time). Any :ADS suffix is stripped — the timestamp belongs to the base record.
+func ntfsMtime(ntfs *parser.NTFSContext, rel string) time.Time {
+	root, err := ntfs.GetMFT(5)
+	if err != nil {
+		return time.Time{}
+	}
+
+	entry, err := root.Open(ntfs, strings.SplitN(rel, ":", 2)[0])
+	if err != nil {
+		return time.Time{}
+	}
+
+	infos := parser.Stat(ntfs, entry)
+	if len(infos) == 0 {
+		return time.Time{}
+	}
+	return infos[0].Mtime
 }
 
 // SectorReaderAt adapts an io.ReaderAt to the sector-aligned reads a raw NTFS

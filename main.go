@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -23,7 +25,6 @@ var (
 type Configuration struct {
 	OutputDir  string // Directory for the generated zip archive
 	OutputFile string // Name of the generated zip archive file
-	LogFile    string // Log file path
 	ZipPass    string // Password for the output zip archive (AES-256 if set)
 
 	SftpAddr string // SFTP server address
@@ -51,10 +52,14 @@ type Configuration struct {
 }
 
 func main() {
-	// Initialize loggers
-	InfoLogger = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime)
-	WarnLogger = log.New(os.Stdout, "WARN: ", log.Ldate|log.Ltime)
-	ErrLogger = log.New(os.Stdout, "ERRR: ", log.Ldate|log.Ltime)
+	// Initialize loggers, teed into an in-memory transcript buffer so the
+	// console output of stages 1-2 can be embedded in the output archive.
+	var transcript bytes.Buffer
+	out := io.MultiWriter(os.Stdout, &transcript)
+	InfoLogger = log.New(out, "INFO: ", log.Ldate|log.Ltime)
+	WarnLogger = log.New(out, "WARN: ", log.Ldate|log.Ltime)
+	ErrLogger = log.New(out, "ERRR: ", log.Ldate|log.Ltime)
+	Jrnl = NewJournal(&transcript)
 
 	// Record the start time
 	begin := time.Now()
@@ -97,17 +102,19 @@ func main() {
 
 // step1TraverseFS traverses the file system based on the provided Configuration,
 // collects file paths, and logs the progress.
-func step1TraverseFS(cfg Configuration) ([]string, error) {
+func step1TraverseFS(cfg Configuration) ([]CollectTarget, error) {
+	Jrnl.started = time.Now()
+
 	if cfg.SkipTraversal {
 		InfoLogger.Println("Stage 1: Traversing file tree skipped.")
-		return []string{}, nil
+		return []CollectTarget{}, nil
 	}
 
 	// Log the start of Stage 1
 	InfoLogger.Println("Stage 1: Traversing file tree ...")
 	start := time.Now()
 
-	var paths []string
+	var paths []CollectTarget
 	var err error
 	if cfg.RawAccess {
 		paths, err = GetPathsRaw(cfg)
@@ -126,7 +133,7 @@ func step1TraverseFS(cfg Configuration) ([]string, error) {
 
 // step2CollectFiles collects files based on the provided file paths, creates a zip archive,
 // and logs the progress.
-func step2CollectFiles(cfg Configuration, paths []string) error {
+func step2CollectFiles(cfg Configuration, paths []CollectTarget) error {
 	if cfg.SkipCollection {
 		InfoLogger.Println("Stage 2: Collecting files skipped.")
 		return nil
@@ -150,17 +157,28 @@ func step2CollectFiles(cfg Configuration, paths []string) error {
 	archive := zip.NewWriter(fh)
 
 	// Iterate over file paths and collect files into the zip archive
-	for _, path := range paths {
+	for _, target := range paths {
+		var entry, sha256, md5 string
+		var size int64
 		if cfg.RawAccess {
-			err = CollectFileRaw(cfg, archive, path)
+			entry, size, sha256, md5, err = CollectFileRaw(cfg, archive, target.Path)
 		} else {
-			err = CollectFile(cfg, archive, path)
+			entry, size, sha256, md5, err = CollectFile(cfg, archive, target.Path)
 		}
 
 		if err != nil {
 			// Log a warning if file collection fails for a specific path
 			WarnLogger.Printf("Stage 2: Failed to collect file: %v", err)
 		}
+
+		Jrnl.RecordFile(target, entry, size, sha256, md5, err)
+	}
+
+	// Write the collection log / manifest / checksum files into the archive
+	// as the last entries, before it is sealed. Non-fatal: a metadata-write
+	// failure still lets the archive close with the collected evidence intact.
+	if err := Jrnl.Flush(cfg, archive); err != nil {
+		WarnLogger.Printf("Stage 2: Failed to write collection log: %v", err)
 	}
 
 	// Close the zip archive

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/md5"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -24,11 +27,16 @@ func DefaulRootPaths() []string {
 	}
 }
 
-func GetPathsRaw(cfg Configuration) ([]string, error) {
+func GetPathsRaw(cfg Configuration) ([]CollectTarget, error) {
 	scanned := 0
-	matchers, paths, err := LoadMatchers(cfg)
+	matchers, forced, err := LoadMatchers(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("load matchers: %w", err)
+	}
+
+	var targets []CollectTarget
+	for _, p := range forced {
+		targets = append(targets, CollectTarget{Path: p, Source: "force"})
 	}
 
 	roots := cfg.CollectionRoots
@@ -63,6 +71,7 @@ func GetPathsRaw(cfg Configuration) ([]string, error) {
 		err = walkDirRaw(ntfs, root, mft, func(path string, info *parser.FileInfo, err error) error {
 			if err != nil {
 				WarnLogger.Printf("traverse | %v", err)
+				Jrnl.RecordDirSkipped(path, err)
 				return fs.SkipDir
 			}
 
@@ -71,7 +80,7 @@ func GetPathsRaw(cfg Configuration) ([]string, error) {
 			if !info.IsDir {
 				for _, match := range matchers {
 					if match(path) || match(pathTrimmed) {
-						paths = append(paths, path)
+						targets = append(targets, CollectTarget{Path: path, Source: "match"})
 						break
 					}
 				}
@@ -80,63 +89,67 @@ func GetPathsRaw(cfg Configuration) ([]string, error) {
 			return nil
 		})
 		if err != nil {
-			return paths, err
+			return targets, err
 		}
 	}
 
-	InfoLogger.Printf("traverse | scanned %d paths, resulted in %d files to collect", scanned, len(paths))
-	return paths, err
+	Jrnl.SetScanned(scanned)
+	InfoLogger.Printf("traverse | scanned %d paths, resulted in %d files to collect", scanned, len(targets))
+	return targets, err
 }
 
-func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) error {
+func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) (string, int64, string, string, error) {
 	rel, err := filepath.Rel(filepath.VolumeName(path)+"/", filepath.ToSlash(path))
 	if err != nil {
-		return err
+		return "", 0, "", "", err
 	}
 
 	driveLetter := filepath.VolumeName(path)
 	fd, err := os.Open("\\\\.\\" + driveLetter)
 	if err != nil {
-		return fmt.Errorf("open drive: %s: %w", path, err)
+		return rel, 0, "", "", fmt.Errorf("open drive: %s: %w", path, err)
 	}
 
 	defer fd.Close()
 	drive := NewSectorReaderAt(fd, 512)
 	ntfsCtx, err := parser.GetNTFSContext(drive, 0)
 	if err != nil {
-		return fmt.Errorf("get ntfs context: %w", err)
+		return rel, 0, "", "", fmt.Errorf("get ntfs context: %w", err)
 	}
 
 	r, err := parser.GetDataForPath(ntfsCtx, rel)
 	if err != nil {
-		return fmt.Errorf("get data stream: %w", err)
+		return rel, 0, "", "", fmt.Errorf("get data stream: %w", err)
 	}
 
-	var fh io.Writer
-	if cfg.ZipPass != "" {
-		fh, err = archive.Encrypt(rel, cfg.ZipPass, zip.AES256Encryption)
-	} else {
-		fh, err = archive.Create(rel)
-	}
+	fh, err := archiveEntry(cfg, archive, rel)
 	if err != nil {
-		return fmt.Errorf("add file to archive: %w", err)
+		return rel, 0, "", "", fmt.Errorf("add file to archive: %w", err)
 	}
 
+	// Tap the digests off the streaming read: hash the source bytes as they
+	// are written to the archive, with no second read.
+	h256 := sha256.New()
+	hmd5 := md5.New()
 	buf := make([]byte, 1024*1024*10)
 	offset := int64(0)
+	size := int64(0)
 	for {
 		n, err := r.ReadAt(buf, offset)
 		if n == 0 || err != nil {
 			if err == nil || errors.Is(err, io.EOF) {
-				return nil
+				return rel, size, hex.EncodeToString(h256.Sum(nil)), hex.EncodeToString(hmd5.Sum(nil)), nil
 			}
-			return fmt.Errorf("read from disk: %w", err)
+			return rel, 0, "", "", fmt.Errorf("read from disk: %w", err)
 		}
 
 		_, err = fh.Write(buf[:n])
 		if err != nil {
-			return fmt.Errorf("write to archive: %w", err)
+			return rel, 0, "", "", fmt.Errorf("write to archive: %w", err)
 		}
+		h256.Write(buf[:n])
+		hmd5.Write(buf[:n])
+		size += int64(n)
 
 		offset += int64(n)
 	}

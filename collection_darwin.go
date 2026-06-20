@@ -15,10 +15,10 @@ func DefaulRootPaths() []string {
 	}
 }
 
-func GetPathsRaw(cfg Configuration) ([]string, error) {
+func GetPathsRaw(cfg Configuration) ([]CollectTarget, error) {
 	return GetPaths(cfg)
 }
 
-func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) error {
+func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) (string, int64, string, string, error) {
 	return CollectFile(cfg, archive, path)
 }

@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
@@ -54,11 +57,16 @@ func LoadMatchers(cfg Configuration) ([]Matcher, []string, error) {
 	}
 }
 
-func GetPaths(cfg Configuration) ([]string, error) {
+func GetPaths(cfg Configuration) ([]CollectTarget, error) {
 	scanned := 0
-	matchers, paths, err := LoadMatchers(cfg)
+	matchers, forced, err := LoadMatchers(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("load matchers: %w", err)
+	}
+
+	var targets []CollectTarget
+	for _, p := range forced {
+		targets = append(targets, CollectTarget{Path: p, Source: "force"})
 	}
 
 	roots := cfg.CollectionRoots
@@ -70,6 +78,7 @@ func GetPaths(cfg Configuration) ([]string, error) {
 		err = filepath.WalkDir(root, func(path string, info fs.DirEntry, err error) error {
 			if err != nil {
 				WarnLogger.Printf("traverse | %v", err)
+				Jrnl.RecordDirSkipped(path, err)
 				return fs.SkipDir
 			}
 
@@ -80,7 +89,7 @@ func GetPaths(cfg Configuration) ([]string, error) {
 			if !info.IsDir() {
 				for _, match := range matchers {
 					if match(path) || match(pathTrimmed) {
-						paths = append(paths, path)
+						targets = append(targets, CollectTarget{Path: path, Source: "match"})
 						break
 					}
 				}
@@ -89,19 +98,32 @@ func GetPaths(cfg Configuration) ([]string, error) {
 			return nil
 		})
 		if err != nil {
-			return paths, err
+			return targets, err
 		}
 	}
 
-	InfoLogger.Printf("traverse | scanned %d paths, resulted in %d files to collect", scanned, len(paths))
-	return paths, err
+	Jrnl.SetScanned(scanned)
+	InfoLogger.Printf("traverse | scanned %d paths, resulted in %d files to collect", scanned, len(targets))
+	return targets, err
 }
 
-func CollectFile(cfg Configuration, archive *zip.Writer, path string) error {
+// archiveEntry creates a zip entry named name, AES-256 encrypted when a
+// password is configured and a plain deflate entry otherwise. It is the single
+// place the encrypt-vs-plain decision lives, so evidence and `_donald/` metadata
+// are protected identically. (CollectFile's plain branch differs only in that it
+// preserves the source mod-time via FileInfoHeader.)
+func archiveEntry(cfg Configuration, archive *zip.Writer, name string) (io.Writer, error) {
+	if cfg.ZipPass != "" {
+		return archive.Encrypt(name, cfg.ZipPass, zip.AES256Encryption)
+	}
+	return archive.Create(name)
+}
+
+func CollectFile(cfg Configuration, archive *zip.Writer, path string) (string, int64, string, string, error) {
 	rel, _ := filepath.Rel(filepath.VolumeName(path)+"/", filepath.ToSlash(path))
 	r, err := os.Open(path)
 	if err != nil {
-		return err
+		return rel, 0, "", "", err
 	}
 	defer r.Close()
 
@@ -109,27 +131,35 @@ func CollectFile(cfg Configuration, archive *zip.Writer, path string) error {
 	if cfg.ZipPass != "" {
 		w, err = archive.Encrypt(rel, cfg.ZipPass, zip.AES256Encryption)
 		if err != nil {
-			return err
+			return rel, 0, "", "", err
 		}
 	} else {
 		fi, err := r.Stat()
 		if err != nil {
-			return err
+			return rel, 0, "", "", err
 		}
 
 		fh, err := zip.FileInfoHeader(fi)
 		if err != nil {
-			return err
+			return rel, 0, "", "", err
 		}
 
 		fh.Name = rel
 		fh.Method = zip.Deflate
 		w, err = archive.CreateHeader(fh)
 		if err != nil {
-			return err
+			return rel, 0, "", "", err
 		}
 	}
 
-	_, err = io.Copy(w, r)
-	return err
+	// Tee the source→archive copy through the hashers: digests cover the
+	// plaintext source bytes, with no extra read. size is the bytes streamed.
+	h256 := sha256.New()
+	hmd5 := md5.New()
+	size, err := io.Copy(io.MultiWriter(w, h256, hmd5), r)
+	if err != nil {
+		return rel, 0, "", "", err
+	}
+
+	return rel, size, hex.EncodeToString(h256.Sum(nil)), hex.EncodeToString(hmd5.Sum(nil)), nil
 }

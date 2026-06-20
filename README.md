@@ -70,6 +70,62 @@ POST so Dagobert can decrypt the evidence; for SFTP, share the password out-of-b
 `-sftp-pass`, a password passed on the command line is visible in the host process list
 and shell history.
 
+## Output metadata (`_donald/`)
+
+Every archive produced by a run that actually collects carries a `_donald/` folder
+describing what the collection did. No flags — it appears automatically:
+
+```
+<hostname>-<timestamp>.zip
+├── _donald/
+│   ├── manifest.jsonl    # structured per-file + summary record
+│   ├── collection.log    # verbatim console transcript (stages 1-2)
+│   ├── sha256sums.txt     # coreutils SHA-256 of every collected entry
+│   └── md5sums.txt        # coreutils MD5 of every collected entry
+└── ...                   # collected evidence
+```
+
+### `manifest.jsonl`
+
+One self-contained JSON object per line, in three record types:
+
+* `file` — one per collection attempt. `status:"collected"` records carry the zip `entry`
+  name, the `size` in bytes, `source` (`match` or `force`), and a lowercase-hex `sha256`
+  and `md5` digest of the file's **source bytes** (computed before compression/encryption,
+  so they verify against the original artifact and against the extracted file).
+  `status:"error"` records carry an `error` message instead and no digests — this is the
+  only place a file that *matched a target but failed to copy* is recorded, since it is
+  absent from the archive.
+* `dir_skipped` — one per directory the traversal could not enumerate (permission denied,
+  locked), the principal reason whole subtrees go uncollected.
+* `summary` — a final line with host, version, targets, roots, and counts
+  (`scanned`/`matched`/`collected`/`errors`/`dirs_skipped`/`bytes_total`) plus
+  start/finish timestamps and duration.
+
+```sh
+jq 'select(.type=="file" and .status=="error")' _donald/manifest.jsonl  # what failed?
+jq 'select(.type=="dir_skipped")'               _donald/manifest.jsonl  # subtrees never seen
+jq 'select(.type=="summary")'                   _donald/manifest.jsonl  # one-line outcome
+```
+
+### `collection.log`
+
+A verbatim copy of the `INFO:`/`WARN:`/`ERRR:` console output from stages 1 (traverse) and
+2 (collect). Upload/cleanup run after the archive is sealed, so their lines print to the
+console only; the manifest `summary` is the durable record of the collection outcome.
+
+### `sha256sums.txt` / `md5sums.txt`
+
+The per-file digests re-expressed in standard coreutils format (`<hex>␠␠<entry>`), one line
+per collected file. After extracting the archive, verify the whole evidence tree in one
+command, from the extraction root:
+
+```sh
+cd extracted/
+sha256sum -c _donald/sha256sums.txt
+md5sum   -c _donald/md5sums.txt
+```
+
 ## Default Collection Paths
 
 All collection paths are case-insensitive. You can easily extend this list through the use of patterns as shown in CUSTOM_PATH_TEMPLATE.txt or by opening a pull request.

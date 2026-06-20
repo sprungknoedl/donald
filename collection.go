@@ -17,13 +17,16 @@ import (
 	zip "github.com/yeka/zip"
 )
 
+// Matcher reports whether a path matches a collection target. Matching is
+// case-insensitive, mirroring CyLR's behaviour, but the input is expected to be
+// already lowercased by the caller: appendIfMatch folds each path once and
+// passes the folded form here, so matchers must not re-fold their input.
 type Matcher func(string) bool
 
-// All matchers are case-insensitive, mirroring CyLR's behaviour.
-
 func NewStaticMatcher(pattern string) Matcher {
+	pattern = strings.ToLower(pattern)
 	return func(filename string) bool {
-		return strings.EqualFold(pattern, filename)
+		return pattern == filename
 	}
 }
 
@@ -31,7 +34,7 @@ func NewGlobMatcher(pattern string) Matcher {
 	pattern = strings.ReplaceAll(pattern, "\\", "\\\\")
 	m, _ := glob.Compile(strings.ToLower(pattern))
 	return func(filename string) bool {
-		return m.Match(strings.ToLower(filename))
+		return m.Match(filename)
 	}
 }
 
@@ -81,9 +84,12 @@ func loadTargetsAndRoots(cfg Configuration) (matchers []Matcher, targets []Colle
 // appendIfMatch tests path (and its root-trimmed form) against every matcher and
 // appends a "match" target on the first hit. Shared by the normal and raw walks.
 func appendIfMatch(targets []CollectTarget, matchers []Matcher, path, root string) []CollectTarget {
-	pathTrimmed := strings.TrimPrefix(path, root)
+	// Trim stays case-sensitive (as today); fold each form once so matchers
+	// operate on already-lowercased input instead of folding per call.
+	pathLower := strings.ToLower(path)
+	pathTrimmedLower := strings.ToLower(strings.TrimPrefix(path, root))
 	for _, match := range matchers {
-		if match(path) || match(pathTrimmed) {
+		if match(pathLower) || match(pathTrimmedLower) {
 			return append(targets, CollectTarget{Path: path, Source: "match"})
 		}
 	}

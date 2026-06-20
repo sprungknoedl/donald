@@ -6,23 +6,25 @@ import (
 )
 
 func TestStaticMatcherCaseInsensitive(t *testing.T) {
+	// Matchers receive already-lowercased input; the constructor folds the
+	// pattern so a mixed-case pattern still matches the lowercased path.
 	m := NewStaticMatcher("C:\\Windows\\System32\\config\\SAM")
 
 	if !m("c:\\windows\\system32\\config\\sam") {
-		t.Error("static matcher should match the same path in different case")
+		t.Error("static matcher should match the lowercased path")
 	}
-	if m("C:\\Windows\\System32\\config\\SAM.LOG") {
+	if m("c:\\windows\\system32\\config\\sam.log") {
 		t.Error("static matcher must be exact, not a prefix/substring match")
 	}
 }
 
 func TestGlobMatcherWindowsBackslashes(t *testing.T) {
 	// Backslashes are escaped by NewGlobMatcher so Windows separators are
-	// treated literally rather than as glob escapes.
+	// treated literally rather than as glob escapes. Input is pre-lowercased.
 	m := NewGlobMatcher("C:\\Users\\*\\NTUSER.DAT")
 
 	if !m("c:\\users\\alice\\ntuser.dat") {
-		t.Error("glob should match a Windows path case-insensitively")
+		t.Error("glob should match a lowercased Windows path")
 	}
 	if m("c:\\programdata\\foo.dat") {
 		t.Error("glob should not match a path outside the pattern")
@@ -32,11 +34,25 @@ func TestGlobMatcherWindowsBackslashes(t *testing.T) {
 func TestRegexpMatcherSubstringInsensitive(t *testing.T) {
 	m := NewRegexpMatcher("system32")
 
-	if !m("C:\\Windows\\System32\\cmd.exe") {
-		t.Error("regex should match as a case-insensitive substring")
+	if !m("c:\\windows\\system32\\cmd.exe") {
+		t.Error("regex should match as a substring of the lowercased path")
 	}
-	if m("C:\\Windows\\explorer.exe") {
+	if m("c:\\windows\\explorer.exe") {
 		t.Error("regex should not match a non-matching path")
+	}
+}
+
+func TestAppendIfMatchCaseInsensitive(t *testing.T) {
+	// Case-insensitivity now lives in appendIfMatch: a mixed-case path must
+	// still match, since appendIfMatch folds it before testing the matchers.
+	matchers := []Matcher{NewGlobMatcher("C:\\Users\\*\\NTUSER.DAT")}
+
+	got := appendIfMatch(nil, matchers, "C:\\Users\\Alice\\NTUSER.DAT", "C:\\")
+	if len(got) != 1 {
+		t.Fatalf("got %d targets, want 1", len(got))
+	}
+	if got[0].Path != "C:\\Users\\Alice\\NTUSER.DAT" {
+		t.Errorf("Path = %q, want the original-case full path", got[0].Path)
 	}
 }
 

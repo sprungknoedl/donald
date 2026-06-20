@@ -22,3 +22,7 @@ func GetPathsRaw(cfg Configuration) ([]CollectTarget, error) {
 func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) (string, int64, string, string, error) {
 	return CollectFile(cfg, archive, path)
 }
+
+// CloseRawCollectors is a no-op off Windows; there is no cached raw volume
+// state to release (the *Raw functions delegate to the normal codepath).
+func CloseRawCollectors() {}

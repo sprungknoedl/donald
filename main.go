@@ -156,6 +156,10 @@ func step2CollectFiles(cfg Configuration, paths []CollectTarget) error {
 	// Create a zip archive
 	archive := zip.NewWriter(fh)
 
+	// Release any cached raw-volume handles when the stage ends, even on a
+	// mid-stage fatal error (no-op off Windows).
+	defer CloseRawCollectors()
+
 	// Iterate over file paths and collect files into the zip archive
 	for _, target := range paths {
 		var entry, sha256, md5 string

@@ -16,20 +16,24 @@ import (
 
 type Matcher func(string) bool
 
+// All matchers are case-insensitive, mirroring CyLR's behaviour.
+
 func NewStaticMatcher(pattern string) Matcher {
 	return func(filename string) bool {
-		return pattern == filename
+		return strings.EqualFold(pattern, filename)
 	}
 }
 
 func NewGlobMatcher(pattern string) Matcher {
 	pattern = strings.ReplaceAll(pattern, "\\", "\\\\")
-	m, _ := glob.Compile(pattern)
-	return m.Match
+	m, _ := glob.Compile(strings.ToLower(pattern))
+	return func(filename string) bool {
+		return m.Match(strings.ToLower(filename))
+	}
 }
 
 func NewRegexpMatcher(pattern string) Matcher {
-	re, _ := regexp.Compile(pattern)
+	re, _ := regexp.Compile("(?i)" + pattern)
 	return re.MatchString
 }
 

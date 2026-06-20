@@ -27,7 +27,6 @@ all:
 	GOOS=darwin GOARCH=amd64 go build -o donald-mac-amd64
 	GOOS=darwin GOARCH=arm64 go build -o donald-mac-arm64
 	GOOS=windows GOARCH=amd64 go build -o donald-windows-amd64.exe
-	GOOS=windows GOARCH=arm go build -o donald-windows-arm.exe
 	GOOS=windows GOARCH=arm64 go build -o donald-windows-arm64.exe
 
 clean:

@@ -55,7 +55,9 @@ func walkNTFS(ntfs *parser.NTFSContext, root string, matchers []Matcher, targets
 // source bytes. rel is the volume-relative path (forward slashes, optionally
 // with an :ADS suffix); the caller is responsible for stripping the volume name.
 // Digests are tapped off the streaming read with no second pass.
-func collectFromNTFS(cfg Configuration, archive *zip.Writer, ntfs *parser.NTFSContext, rel string) (string, int64, string, string, error) {
+// buf is the caller-supplied read buffer the stream is copied through; it is
+// reused across files and is NOT safe for concurrent use.
+func collectFromNTFS(cfg Configuration, archive *zip.Writer, ntfs *parser.NTFSContext, rel string, buf []byte) (string, int64, string, string, error) {
 	r, err := parser.GetDataForPath(ntfs, rel)
 	if err != nil {
 		return rel, 0, "", "", fmt.Errorf("get data stream: %w", err)
@@ -69,7 +71,6 @@ func collectFromNTFS(cfg Configuration, archive *zip.Writer, ntfs *parser.NTFSCo
 	// Tap the digests off the streaming read: hash the source bytes as they
 	// are written to the archive, with no second read.
 	hashes, digests := newHashers()
-	buf := make([]byte, 1024*1024*10)
 	offset := int64(0)
 	size := int64(0)
 	for {
@@ -100,6 +101,9 @@ func collectFromNTFS(cfg Configuration, archive *zip.Writer, ntfs *parser.NTFSCo
 type SectorReaderAt struct {
 	r          io.ReaderAt
 	sectorSize int
+	// scratch backs the misaligned read path, grown and reused across calls. It
+	// is NOT safe for concurrent ReadAt on the same SectorReaderAt.
+	scratch []byte
 }
 
 func NewSectorReaderAt(r io.ReaderAt, sectorSize int) *SectorReaderAt {
@@ -107,12 +111,22 @@ func NewSectorReaderAt(r io.ReaderAt, sectorSize int) *SectorReaderAt {
 }
 
 func (r *SectorReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	// Aligned fast path: the collection loop issues only whole-sector reads on
+	// sector boundaries, so read straight into the caller's buffer — no scratch
+	// buffer, no copy.
+	if off%int64(r.sectorSize) == 0 && len(p)%r.sectorSize == 0 {
+		return r.r.ReadAt(p, off)
+	}
+
 	sector := int(off) / r.sectorSize
 	sectorOff := int64(sector) * int64(r.sectorSize)
 	misalignment := int(off) % r.sectorSize
 	size := roundUp(len(p)+int(misalignment), r.sectorSize)
 
-	buf := make([]byte, size)
+	if cap(r.scratch) < size {
+		r.scratch = make([]byte, size)
+	}
+	buf := r.scratch[:size]
 	n, err := r.r.ReadAt(buf, sectorOff)
 	copy(p, buf[misalignment:])
 	return n, err

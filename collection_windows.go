@@ -73,6 +73,10 @@ func GetPathsRaw(cfg Configuration) ([]CollectTarget, error) {
 type rawCollector struct {
 	fd  *os.File
 	ctx *parser.NTFSContext
+	// buf is the 10 MB read buffer collectFromNTFS streams each file through,
+	// reused across every file from this drive. Stage 2 collects sequentially,
+	// so this is NOT safe for concurrent use.
+	buf []byte
 }
 
 // rawCollectors caches one open volume + NTFS context per drive letter for the
@@ -99,7 +103,7 @@ func rawCollectorFor(driveLetter string) (*rawCollector, error) {
 		return nil, fmt.Errorf("get ntfs context: %w", err)
 	}
 
-	c := &rawCollector{fd: fd, ctx: ntfs}
+	c := &rawCollector{fd: fd, ctx: ntfs, buf: make([]byte, 1024*1024*10)}
 	rawCollectors[driveLetter] = c
 	return c, nil
 }
@@ -123,5 +127,5 @@ func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) (string
 		return rel, 0, "", "", err
 	}
 
-	return collectFromNTFS(cfg, archive, c.ctx, rel)
+	return collectFromNTFS(cfg, archive, c.ctx, rel, c.buf)
 }

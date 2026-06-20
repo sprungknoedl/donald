@@ -109,7 +109,7 @@ func TestCollectFromNTFSAlternateDataStream(t *testing.T) {
 	var buf bytes.Buffer
 	archive := zip.NewWriter(&buf)
 
-	entry, size, sha256sum, _, err := collectFromNTFS(Configuration{}, archive, ntfs, rel)
+	entry, size, sha256sum, _, err := collectFromNTFS(Configuration{}, archive, ntfs, rel, make([]byte, 1024*1024*10))
 	if err != nil {
 		t.Fatalf("collectFromNTFS: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestCollectFromNTFSNonResidentFile(t *testing.T) {
 	)
 
 	archive := zip.NewWriter(&bytes.Buffer{})
-	_, size, sha256sum, _, err := collectFromNTFS(Configuration{}, archive, ntfs, rel)
+	_, size, sha256sum, _, err := collectFromNTFS(Configuration{}, archive, ntfs, rel, make([]byte, 1024*1024*10))
 	if err != nil {
 		t.Fatalf("collectFromNTFS: %v", err)
 	}

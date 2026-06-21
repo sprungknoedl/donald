@@ -140,23 +140,26 @@ func zipMethod(cfg Configuration) uint16 {
 	return zip.Deflate
 }
 
-// archiveEntry creates a deflate zip entry named name, stamped with modTime,
-// AES-256 encrypted when a password is configured and plain otherwise. It builds
-// the FileHeader directly (rather than the Encrypt/Create helpers) so the caller
-// can carry the source mod-time onto the entry even for encrypted output. It is
-// the single place the encrypt-vs-plain decision lives, so evidence and
-// `_donald/` metadata are protected identically.
-func archiveEntry(cfg Configuration, archive *zip.Writer, name string, modTime time.Time) (io.Writer, error) {
-	fh := &zip.FileHeader{
-		Name:     name,
-		Method:   zipMethod(cfg),
-		Modified: modTime,
-	}
+// createEntry stamps the cfg-driven compression method and encryption onto fh,
+// then creates the archive entry. It is the single place the method/encrypt
+// decision lives, so every entry — FileInfo-derived evidence and bare-header
+// `_donald/` metadata alike — is compressed and protected identically. It builds
+// from a caller-supplied FileHeader (rather than the Encrypt/Create helpers) so
+// the source mod-time and mode survive onto the entry even for encrypted output.
+func createEntry(cfg Configuration, archive *zip.Writer, fh *zip.FileHeader) (io.Writer, error) {
+	fh.Method = zipMethod(cfg)
 	if cfg.ZipPass != "" {
 		fh.SetPassword(cfg.ZipPass)
 		fh.SetEncryptionMethod(zip.AES256Encryption)
 	}
 	return archive.CreateHeader(fh)
+}
+
+// createNamedEntry creates an entry from just a name and modTime, for callers
+// with no os.FileInfo to derive a header from: raw-NTFS evidence (mod-time from
+// the MFT) and synthesized `_donald/` metadata.
+func createNamedEntry(cfg Configuration, archive *zip.Writer, name string, modTime time.Time) (io.Writer, error) {
+	return createEntry(cfg, archive, &zip.FileHeader{Name: name, Modified: modTime})
 }
 
 // newHashers returns a writer feeding both a SHA-256 and an MD5 hasher and a
@@ -193,13 +196,8 @@ func CollectFile(cfg Configuration, archive *zip.Writer, path string) (string, i
 	}
 
 	fh.Name = rel
-	fh.Method = zipMethod(cfg)
-	if cfg.ZipPass != "" {
-		fh.SetPassword(cfg.ZipPass)
-		fh.SetEncryptionMethod(zip.AES256Encryption)
-	}
 
-	w, err := archive.CreateHeader(fh)
+	w, err := createEntry(cfg, archive, fh)
 	if err != nil {
 		return rel, 0, "", "", err
 	}

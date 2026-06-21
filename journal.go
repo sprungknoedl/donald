@@ -158,7 +158,7 @@ func (j *Journal) Flush(cfg Configuration, archive *zip.Writer) error {
 
 	// _donald/collection.log — verbatim transcript of stages 1-2. Encrypted
 	// alongside the evidence when -zip-pass is set (it carries host paths/log lines).
-	w, err := archiveEntry(cfg, archive, "_donald/collection.log", now)
+	w, err := createNamedEntry(cfg, archive, "_donald/collection.log", now)
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func (j *Journal) Flush(cfg Configuration, archive *zip.Writer) error {
 	}
 
 	// _donald/manifest.jsonl — one JSON object per line, summary last.
-	w, err = archiveEntry(cfg, archive, "_donald/manifest.jsonl", now)
+	w, err = createNamedEntry(cfg, archive, "_donald/manifest.jsonl", now)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (j *Journal) Flush(cfg Configuration, archive *zip.Writer) error {
 	}
 
 	// _donald/sha256sums.txt — coreutils format, one line per collected file.
-	sha, err := archiveEntry(cfg, archive, "_donald/sha256sums.txt", now)
+	sha, err := createNamedEntry(cfg, archive, "_donald/sha256sums.txt", now)
 	if err != nil {
 		return err
 	}
@@ -228,7 +228,7 @@ func (j *Journal) Flush(cfg Configuration, archive *zip.Writer) error {
 	}
 
 	// _donald/md5sums.txt — coreutils format, one line per collected file.
-	m, err := archiveEntry(cfg, archive, "_donald/md5sums.txt", now)
+	m, err := createNamedEntry(cfg, archive, "_donald/md5sums.txt", now)
 	if err != nil {
 		return err
 	}

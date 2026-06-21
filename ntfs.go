@@ -65,7 +65,7 @@ func collectFromNTFS(cfg Configuration, archive *zip.Writer, ntfs *parser.NTFSCo
 		return rel, 0, "", "", fmt.Errorf("get data stream: %w", err)
 	}
 
-	fh, err := archiveEntry(cfg, archive, rel, ntfsMtime(ntfs, rel))
+	fh, err := createNamedEntry(cfg, archive, rel, ntfsMtime(ntfs, rel))
 	if err != nil {
 		return rel, 0, "", "", fmt.Errorf("add file to archive: %w", err)
 	}

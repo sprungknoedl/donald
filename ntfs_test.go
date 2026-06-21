@@ -71,7 +71,7 @@ func TestWalkNTFSMatchesNestedFile(t *testing.T) {
 	// Glob over the forward-slash paths the walk yields when rooted at "/".
 	matchers := []Matcher{mustGlob(t, "/Folder A/Folder B/*.txt")}
 
-	targets, scanned, err := walkNTFS(ntfs, "/", matchers, nil)
+	targets, scanned, err := walkNTFS(ntfs, "/", matchers, nil, nil)
 	if err != nil {
 		t.Fatalf("walkNTFS: %v", err)
 	}
@@ -93,6 +93,43 @@ func TestWalkNTFSMatchesNestedFile(t *testing.T) {
 	if found.Source != "match" {
 		t.Errorf("target source = %q, want %q", found.Source, "match")
 	}
+}
+
+// Case 1b: a directory in the skip set is pruned — its children never reach the
+// target list even though they match.
+func TestWalkNTFSSkipsDir(t *testing.T) {
+	ntfs := loadTestNTFS(t)
+
+	matchers := []Matcher{mustGlob(t, "/Folder A/Folder B/*.txt")}
+	const child = "/Folder A/Folder B/Hello world text document.txt"
+
+	// Sanity: with no skip set, the nested match is collected.
+	targets, _, err := walkNTFS(ntfs, "/", matchers, nil, nil)
+	if err != nil {
+		t.Fatalf("walkNTFS (no skip): %v", err)
+	}
+	if !containsTarget(targets, child) {
+		t.Fatalf("expected %q to be collected without a skip set", child)
+	}
+
+	// With "/Folder A" skipped, the subtree is pruned and the child disappears.
+	set := skipDirSet(Configuration{SkipDirs: []string{"/Folder A"}})
+	targets, _, err = walkNTFS(ntfs, "/", matchers, set, nil)
+	if err != nil {
+		t.Fatalf("walkNTFS (skip): %v", err)
+	}
+	if containsTarget(targets, child) {
+		t.Errorf("%q should have been pruned by skip-dir /Folder A", child)
+	}
+}
+
+func containsTarget(targets []CollectTarget, path string) bool {
+	for _, tg := range targets {
+		if tg.Path == path {
+			return true
+		}
+	}
+	return false
 }
 
 // Case 2: collectFromNTFS extracts an alternate data stream and the archived

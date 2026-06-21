@@ -44,6 +44,7 @@ type Configuration struct {
 	DagobertFile string // Target filename on Dagobert
 
 	CollectionRoots []string // Search root paths
+	SkipDirs        []string // Directories to prune during traversal
 	QuackTargets    string   // Quack collection paths file
 	KapeTargets     string   // Kape target name
 	KapeFiles       string   // Directory with Kape target and module files
@@ -337,6 +338,12 @@ func ParseConfig() (Configuration, error) {
 	usageRoots := fmt.Sprintf("Defines the search root path(s). If multiple root paths are given, they are traversed in order. (default %q)", defaultRoots)
 	flag.Func("root", usageRoots, func(s string) error {
 		cfg.CollectionRoots = append(cfg.CollectionRoots, s)
+		return nil
+	})
+	defaultSkipDirs := strings.Join(DefaultSkipDirs(), ", ")
+	usageSkipDirs := fmt.Sprintf("Directories to prune during traversal (repeatable). Matched by exact, case-insensitive path. Passing any -skip-dir replaces the OS defaults. (default %q)", defaultSkipDirs)
+	flag.Func("skip-dir", usageSkipDirs, func(s string) error {
+		cfg.SkipDirs = append(cfg.SkipDirs, s)
 		return nil
 	})
 	flag.StringVar(&cfg.QuackTargets, "c", "", "Add custom collection paths (one entry per line). NOTE: Please see example.quack for the syntax.")

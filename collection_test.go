@@ -25,6 +25,29 @@ func mustRegexp(t *testing.T, pattern string) Matcher {
 	return m
 }
 
+func TestShouldSkipDir(t *testing.T) {
+	set := skipDirSet(Configuration{SkipDirs: []string{"/System/Volumes/Data", "/dev"}})
+
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/dev", true},
+		{"/DEV", true},                 // case-insensitive
+		{"/System/Volumes/Data", true}, // exact multi-segment
+		{"/system/volumes/data", true}, // case-insensitive multi-segment
+		{"/devices", false},            // exact, not prefix
+		{"/dev/null", false},           // children are not the dir itself
+		{"/System/Volumes", false},     // a parent is not skipped
+		{"/Users", false},              // unrelated
+	}
+	for _, tc := range cases {
+		if got := shouldSkipDir(set, tc.path); got != tc.want {
+			t.Errorf("shouldSkipDir(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}
+
 func TestStaticMatcherCaseInsensitive(t *testing.T) {
 	// Matchers receive already-lowercased input; the constructor folds the
 	// pattern so a mixed-case pattern still matches the lowercased path.

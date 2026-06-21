@@ -69,13 +69,37 @@ func LoadMatchers(cfg Configuration) ([]Matcher, []string, error) {
 	}
 }
 
+// skipDirSet builds the lowercased set of directories to prune during traversal.
+// It uses cfg.SkipDirs when given, otherwise the per-OS DefaultSkipDirs() — same
+// replace-not-add precedence as -root / DefaulRootPaths.
+func skipDirSet(cfg Configuration) map[string]bool {
+	dirs := cfg.SkipDirs
+	if len(dirs) == 0 {
+		dirs = DefaultSkipDirs()
+	}
+
+	set := make(map[string]bool, len(dirs))
+	for _, d := range dirs {
+		set[strings.ToLower(d)] = true
+	}
+	return set
+}
+
+// shouldSkipDir reports whether path is an exact (case-insensitive) member of the
+// skip set, mirroring the static-matcher convention. The match is exact, not a
+// prefix: a "/dev" entry does not skip "/devices".
+func shouldSkipDir(set map[string]bool, path string) bool {
+	return set[strings.ToLower(path)]
+}
+
 // loadTargetsAndRoots performs the shared prologue of both traversal codepaths:
 // it loads the matchers, seeds the target list with the unconditional `force`
-// paths, and resolves the collection roots (falling back to the platform default).
-func loadTargetsAndRoots(cfg Configuration) (matchers []Matcher, targets []CollectTarget, roots []string, err error) {
+// paths, resolves the collection roots (falling back to the platform default),
+// and resolves the skip-dir set once so both walks share it.
+func loadTargetsAndRoots(cfg Configuration) (matchers []Matcher, targets []CollectTarget, roots []string, set map[string]bool, err error) {
 	matchers, forced, err := LoadMatchers(cfg)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("load matchers: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("load matchers: %w", err)
 	}
 
 	for _, p := range forced {
@@ -87,7 +111,7 @@ func loadTargetsAndRoots(cfg Configuration) (matchers []Matcher, targets []Colle
 		roots = DefaulRootPaths()
 	}
 
-	return matchers, targets, roots, nil
+	return matchers, targets, roots, skipDirSet(cfg), nil
 }
 
 // appendIfMatch tests path (and its root-trimmed form) against every matcher and
@@ -107,7 +131,7 @@ func appendIfMatch(targets []CollectTarget, matchers []Matcher, path, root strin
 
 func GetPaths(cfg Configuration) ([]CollectTarget, error) {
 	scanned := 0
-	matchers, targets, roots, err := loadTargetsAndRoots(cfg)
+	matchers, targets, roots, set, err := loadTargetsAndRoots(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +141,10 @@ func GetPaths(cfg Configuration) ([]CollectTarget, error) {
 			if err != nil {
 				WarnLogger.Printf("traverse | %v", err)
 				Jrnl.RecordDirSkipped(path, err)
+				return fs.SkipDir
+			}
+
+			if info.IsDir() && shouldSkipDir(set, path) {
 				return fs.SkipDir
 			}
 

@@ -23,7 +23,7 @@ import (
 // appending a "match" target for every non-directory path that matches. It
 // returns the grown target slice and the number of paths scanned. Mirrors the
 // per-root body of the plain GetPaths walk, but over the raw MFT.
-func walkNTFS(ntfs *parser.NTFSContext, root string, matchers []Matcher, targets []CollectTarget) ([]CollectTarget, int, error) {
+func walkNTFS(ntfs *parser.NTFSContext, root string, matchers []Matcher, set map[string]bool, targets []CollectTarget) ([]CollectTarget, int, error) {
 	mft, err := ntfs.GetMFT(5)
 	if err != nil {
 		return targets, 0, fmt.Errorf("get mft 5: %w", err)
@@ -39,6 +39,10 @@ func walkNTFS(ntfs *parser.NTFSContext, root string, matchers []Matcher, targets
 		if err != nil {
 			WarnLogger.Printf("traverse | %v", err)
 			Jrnl.RecordDirSkipped(path, err)
+			return fs.SkipDir
+		}
+
+		if info.IsDir && shouldSkipDir(set, path) {
 			return fs.SkipDir
 		}
 

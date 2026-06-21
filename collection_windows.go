@@ -20,6 +20,13 @@ func DefaulRootPaths() []string {
 	}
 }
 
+// DefaultSkipDirs has no entries on Windows (no firmlink/duplicate-volume
+// problem). It exists for parity with the other platforms so -skip-dir has a
+// home and the shared skip-dir framework compiles everywhere.
+func DefaultSkipDirs() []string {
+	return nil
+}
+
 // openNTFSVolume opens the raw volume backing root (e.g. \\.\C:) and builds an
 // NTFS context over it. This is the only genuinely Windows-specific step of the
 // raw codepath; everything downstream is platform-independent (see ntfs.go).
@@ -42,7 +49,7 @@ func openNTFSVolume(root string) (*parser.NTFSContext, func() error, error) {
 }
 
 func GetPathsRaw(cfg Configuration) ([]CollectTarget, error) {
-	matchers, targets, roots, err := loadTargetsAndRoots(cfg)
+	matchers, targets, roots, set, err := loadTargetsAndRoots(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +62,7 @@ func GetPathsRaw(cfg Configuration) ([]CollectTarget, error) {
 		}
 
 		var n int
-		targets, n, err = walkNTFS(ntfs, root, matchers, targets)
+		targets, n, err = walkNTFS(ntfs, root, matchers, set, targets)
 		scanned += n
 		closeVol()
 		if err != nil {

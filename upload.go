@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -122,6 +123,23 @@ func UploadDagobert(cfg Configuration, sum string) error {
 
 	req.Header.Set("X-API-Key", cfg.DagobertKey)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	_, err = http.DefaultClient.Do(req)
-	return err
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// http.Client.Do only returns an error for transport-level failures; an
+	// HTTP error response (e.g. 403 Forbidden) arrives with a nil error. Treat
+	// any non-2xx status as a failed upload so the archive is not cleaned up.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := strings.TrimSpace(string(body))
+		if msg != "" {
+			return fmt.Errorf("server returned %s: %s", resp.Status, msg)
+		}
+		return fmt.Errorf("server returned %s", resp.Status)
+	}
+
+	return nil
 }

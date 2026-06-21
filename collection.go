@@ -129,6 +129,17 @@ func GetPaths(cfg Configuration) ([]CollectTarget, error) {
 	return targets, err
 }
 
+// zipMethod returns the storage method for an entry given the configured
+// -zip-level: Store for level 0 (true no-op container entries) and Deflate
+// otherwise. Levels 1..9 are applied via the leveled compressor registered in
+// step2CollectFiles; level -1 (unset) keeps the stdlib default Deflate.
+func zipMethod(cfg Configuration) uint16 {
+	if cfg.CompressionLevel == 0 {
+		return zip.Store
+	}
+	return zip.Deflate
+}
+
 // archiveEntry creates a deflate zip entry named name, stamped with modTime,
 // AES-256 encrypted when a password is configured and plain otherwise. It builds
 // the FileHeader directly (rather than the Encrypt/Create helpers) so the caller
@@ -138,7 +149,7 @@ func GetPaths(cfg Configuration) ([]CollectTarget, error) {
 func archiveEntry(cfg Configuration, archive *zip.Writer, name string, modTime time.Time) (io.Writer, error) {
 	fh := &zip.FileHeader{
 		Name:     name,
-		Method:   zip.Deflate,
+		Method:   zipMethod(cfg),
 		Modified: modTime,
 	}
 	if cfg.ZipPass != "" {
@@ -182,7 +193,7 @@ func CollectFile(cfg Configuration, archive *zip.Writer, path string) (string, i
 	}
 
 	fh.Name = rel
-	fh.Method = zip.Deflate
+	fh.Method = zipMethod(cfg)
 	if cfg.ZipPass != "" {
 		fh.SetPassword(cfg.ZipPass)
 		fh.SetEncryptionMethod(zip.AES256Encryption)

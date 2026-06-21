@@ -30,6 +30,9 @@ $ donald -h
         SFTP password.
   -sftp-user string
         SFTP username.
+  -zip-level int
+        Zip compression level: 0 = store (no compression), 1 (fastest) .. 9 (smallest).
+        If unset, the standard Deflate default is used. (default: standard Deflate)
   -zip-pass string
         Password for the output archive. If set, the archive is AES-256 encrypted.
 ```
@@ -51,6 +54,22 @@ donald -od data -of important-data.zip
 # Send data to an SFTP server
 donald.exe -sftp-user username -sftp-pass password -sftp-addr 8.8.8.8
 ```
+
+## Compression level
+
+`-zip-level` trades CPU/time for archive size. `0` stores files uncompressed (zip `Store`
+method — fastest, and ideal for already-compressed evidence like `.evtx` or browser caches),
+`1` (fastest) to `9` (smallest) selects the Deflate level, and leaving the flag unset keeps
+today's standard Deflate default.
+
+```sh
+donald -zip-level 0    # no compression, fastest
+donald -zip-level 9    # maximum compression, smallest archive
+```
+
+It applies to both the normal and raw-NTFS collection paths and composes with `-zip-pass`
+(files are compressed, then encrypted). It does not affect the per-file digests recorded in
+the manifest, which are taken over the source bytes.
 
 ## Encrypted output
 

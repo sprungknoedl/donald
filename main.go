@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/flate"
 	"crypto/sha256"
 	"encoding/hex"
 	"flag"
@@ -28,6 +29,8 @@ type Configuration struct {
 	OutputDir  string // Directory for the generated zip archive
 	OutputFile string // Name of the generated zip archive file
 	ZipPass    string // Password for the output zip archive (AES-256 if set)
+
+	CompressionLevel int // Zip compression level: -1 (unset, stdlib default), 0 (store), 1..9 (deflate)
 
 	SftpAddr string // SFTP server address
 	SftpUser string // SFTP server username
@@ -160,6 +163,16 @@ func step2CollectFiles(cfg Configuration, paths []CollectTarget) (string, error)
 	// bytes on disk without re-reading the archive.
 	h := sha256.New()
 	archive := zip.NewWriter(io.MultiWriter(fh, h))
+
+	// Honor -zip-level for the Deflate entries: levels 1..9 register a leveled
+	// flate compressor used by every Deflate entry. Level 0 (Store) is set per
+	// entry by the collect funcs; -1 (unset) registers nothing, keeping the
+	// stdlib default Deflate.
+	if cfg.CompressionLevel >= 1 {
+		archive.RegisterCompressor(zip.Deflate, func(w io.Writer) (io.WriteCloser, error) {
+			return flate.NewWriter(w, cfg.CompressionLevel)
+		})
+	}
 
 	// Release any cached raw-volume handles when the stage ends, even on a
 	// mid-stage fatal error (no-op off Windows).
@@ -307,6 +320,7 @@ func ParseConfig() (Configuration, error) {
 	flag.StringVar(&cfg.OutputDir, "od", ".", "Defines the directory that the zip archive will be created in.")
 	flag.StringVar(&cfg.OutputFile, "of", hostname+"-"+now+".zip", "Defines the name of the zip archive created.")
 	flag.StringVar(&cfg.ZipPass, "zip-pass", "", "Password for the output zip archive. If set, the archive is AES-256 encrypted (WinZip AES). If empty, the archive is not encrypted.")
+	flag.IntVar(&cfg.CompressionLevel, "zip-level", -1, "Zip compression level: 0 = store (no compression), 1 (fastest) .. 9 (smallest). If unset, the standard Deflate default is used.")
 
 	flag.StringVar(&cfg.SftpAddr, "sftp-addr", "", "SFTP server address")
 	flag.StringVar(&cfg.SftpUser, "sftp-user", "", "SFTP username")
@@ -340,6 +354,10 @@ func ParseConfig() (Configuration, error) {
 	flag.Parse()
 
 	// Sanity checks & modifications
+	if cfg.CompressionLevel < -1 || cfg.CompressionLevel > 9 {
+		return cfg, fmt.Errorf("invalid -zip-level %d: want 0..9", cfg.CompressionLevel)
+	}
+
 	cfg.SkipTraversal = cfg.SkipTraversal || cfg.SkipCollection
 	cfg.SkipCleanup = cfg.SkipCleanup || cfg.SkipUpload || (cfg.SftpAddr == "" && cfg.DagobertAddr == "")
 

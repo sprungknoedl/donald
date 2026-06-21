@@ -165,9 +165,15 @@ glob	\**\r*.exe
 # Regex patterns #
 #++++++++++++++++#
 #
-# Allows the specification of advanced patterns for detection. This is the 
-# slowest method and should be leveraged if pattern functionality is available 
+# Allows the specification of advanced patterns for detection. This is the
+# slowest method and should only be leveraged if pattern functionality available
 # through the other options is insufficient.
+#
+# IMPORTANT: a single regex target disables directory pruning for the ENTIRE
+# collection. donald normally derives a literal path prefix from each static/glob
+# target and skips directories no target could match; a regex has no extractable
+# prefix, so adding even one forces a full walk of every directory on the volume.
+# Prefer static/glob whenever possible.
 #
 # This supports patterns specified by dotnet's regex implementation, documented
 # here: 

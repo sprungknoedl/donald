@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,27 +19,43 @@ import (
 	zip "github.com/sprungknoedl/zip"
 )
 
-// Matcher reports whether a path matches a collection target. Matching is
-// case-insensitive, mirroring CyLR's behaviour, but the input is expected to be
-// already lowercased by the caller: appendIfMatch folds each path once and
-// passes the folded form here, so matchers must not re-fold their input.
-type Matcher func(string) bool
+// Matcher pairs a path predicate with the literal path prefix it can match under.
+// Matching is case-insensitive, mirroring CyLR's behaviour, but Match's input is
+// expected to be already lowercased by the caller: appendIfMatch folds each path
+// once and passes the folded form, so Match must not re-fold its input.
+//
+// Prefix is the lowercased literal path prefix every match must start with (e.g.
+// "/var/log/" for the glob "/var/log/**"), or "" when the matcher is unprunable —
+// its matches are not anchored to a literal prefix. The constructors derive it
+// alongside Match so the two can never desync. Directory pruning (see prunable /
+// shouldDescend) reads it to skip subtrees no matcher could match.
+type Matcher struct {
+	Match  func(string) bool
+	Prefix string
+}
 
 func NewStaticMatcher(pattern string) Matcher {
 	pattern = strings.ToLower(pattern)
-	return func(filename string) bool {
-		return pattern == filename
+	// A static pattern is a full literal path, so the whole thing is its prefix.
+	return Matcher{
+		Match:  func(filename string) bool { return pattern == filename },
+		Prefix: pattern,
 	}
 }
 
 func NewGlobMatcher(pattern string) (Matcher, error) {
+	// The prefix is the literal run before the first glob meta character, taken
+	// from the raw pattern (before backslash-escaping) so it keeps the same
+	// separator form the walked directory paths use.
+	prefix := strings.ToLower(literalGlobPrefix(pattern))
 	pattern = strings.ReplaceAll(pattern, "\\", "\\\\")
 	m, err := glob.Compile(strings.ToLower(pattern))
 	if err != nil {
-		return nil, err
+		return Matcher{}, err
 	}
-	return func(filename string) bool {
-		return m.Match(filename)
+	return Matcher{
+		Match:  func(filename string) bool { return m.Match(filename) },
+		Prefix: prefix,
 	}, nil
 }
 
@@ -47,9 +64,42 @@ func NewRegexpMatcher(pattern string) (Matcher, error) {
 	if err != nil {
 		// regexp wraps its message in "error parsing regexp: "; drop it since
 		// the caller already labels the failure as an invalid regex.
-		return nil, fmt.Errorf("%s", strings.TrimPrefix(err.Error(), "error parsing regexp: "))
+		return Matcher{}, fmt.Errorf("%s", strings.TrimPrefix(err.Error(), "error parsing regexp: "))
 	}
-	return re.MatchString, nil
+	// Extracting a literal prefix from a Go regex is not worth it, so a regex is
+	// always unprunable. Note the cost: a single regex target leaves an empty
+	// Prefix, which (via prunable) turns off directory pruning for the whole
+	// collection and forces a full-volume walk, however tightly scoped the other
+	// targets are.
+	return Matcher{Match: re.MatchString, Prefix: ""}, nil
+}
+
+// literalGlobPrefix returns the leading run of pattern that contains no glob meta
+// character, i.e. the literal path prefix every match must start with. The meta
+// characters are *, ?, [ and { (gobwas/glob's openers); a pattern that starts
+// with one yields "" (no usable prefix). Backslashes are treated as ordinary path
+// bytes, not glob escapes — NewGlobMatcher escapes them so Windows separators
+// match literally, so the extracted prefix keeps them in the same separator form
+// the walked directory paths use.
+func literalGlobPrefix(pattern string) string {
+	if i := strings.IndexAny(pattern, "*?[{"); i >= 0 {
+		return pattern[:i]
+	}
+	return pattern
+}
+
+// prunable derives the per-matcher literal prefixes and whether directory pruning
+// is enabled. Pruning is a pure function of the loaded matchers, computed once
+// before a walk: it is on only when there is at least one matcher and every one
+// has a non-empty prefix. A single empty prefix (a leading-** glob or a regex
+// matcher) means some matcher could match anywhere, so pruning must be disabled
+// entirely to stay result-preserving.
+func prunable(matchers []Matcher) (prefixes []string, prune bool) {
+	prefixes = make([]string, len(matchers))
+	for i, m := range matchers {
+		prefixes[i] = m.Prefix
+	}
+	return prefixes, len(prefixes) > 0 && !slices.Contains(prefixes, "")
 }
 
 func LoadMatchers(cfg Configuration) ([]Matcher, []string, error) {
@@ -92,6 +142,35 @@ func shouldSkipDir(set map[string]bool, path string) bool {
 	return set[strings.ToLower(path)]
 }
 
+// shouldDescend reports whether dir is worth walking given the literal prefixes:
+// true if dir shares a path with some prefix p — either dir is on the way down to
+// p (dir is a path-prefix of p) or dir already sits inside p's subtree (p is a
+// path-prefix of dir). Comparison is on segment boundaries so /var does not match
+// /variant. dir and the prefixes are assumed already lowercased; the caller folds
+// dir before calling, mirroring appendIfMatch.
+func shouldDescend(prefixes []string, dir string) bool {
+	for _, p := range prefixes {
+		if pathHasPrefix(dir, p) || pathHasPrefix(p, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+// pathHasPrefix reports whether path b lies at or below path a, comparing on
+// segment boundaries: true if b equals a or b continues a right after a
+// separator. Trailing separators on either operand are ignored, and both / and \
+// count as separators, so it works for the unix and Windows path forms alike.
+func pathHasPrefix(a, b string) bool {
+	a = strings.TrimRight(a, "/\\")
+	b = strings.TrimRight(b, "/\\")
+	if !strings.HasPrefix(b, a) {
+		return false
+	}
+	rest := b[len(a):]
+	return rest == "" || rest[0] == '/' || rest[0] == '\\'
+}
+
 // loadTargetsAndRoots performs the shared prologue of both traversal codepaths:
 // it loads the matchers, seeds the target list with the unconditional `force`
 // paths, resolves the collection roots (falling back to the platform default),
@@ -122,8 +201,8 @@ func loadTargetsAndRoots(cfg Configuration) (matchers []Matcher, targets []Colle
 func appendIfMatch(targets []CollectTarget, matchers []Matcher, path string) []CollectTarget {
 	// Fold the path once; every matcher reuses the lowercased form.
 	pathLower := strings.ToLower(path)
-	for _, match := range matchers {
-		if match(pathLower) {
+	for _, m := range matchers {
+		if m.Match(pathLower) {
 			return append(targets, CollectTarget{Path: path, Source: "match"})
 		}
 	}
@@ -137,6 +216,9 @@ func GetPaths(cfg Configuration) ([]CollectTarget, error) {
 		return nil, err
 	}
 
+	// Decide pruning once: it is a pure function of the loaded matchers.
+	prefixes, prune := prunable(matchers)
+
 	for _, root := range roots {
 		err = filepath.WalkDir(root, func(path string, info fs.DirEntry, err error) error {
 			if err != nil {
@@ -145,8 +227,13 @@ func GetPaths(cfg Configuration) ([]CollectTarget, error) {
 				return fs.SkipDir
 			}
 
-			if info.IsDir() && shouldSkipDir(set, path) {
-				return fs.SkipDir
+			if info.IsDir() {
+				if shouldSkipDir(set, path) {
+					return fs.SkipDir
+				}
+				if prune && !shouldDescend(prefixes, strings.ToLower(path)) {
+					return fs.SkipDir
+				}
 			}
 
 			scanned++

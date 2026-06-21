@@ -135,6 +135,12 @@ There are four pattern types:
   ```
   regex	C:\[0-9]+.exe                    # numeric-only exe in C:\
   ```
+  > **Performance warning:** a single `regex` target disables directory pruning for the
+  > **entire** collection. Normally donald derives a literal path prefix from each
+  > `static`/`glob` target and skips descending into directories no target could match,
+  > so a tightly scoped target set walks only the relevant subtrees. A regex has no
+  > extractable prefix, so adding even one forces donald back to a full walk of every
+  > directory on the volume — slow on a large disk. Prefer `static`/`glob` whenever you can.
 * **force** works like static, but collects the file even if directory enumeration never
   sees it. Use it for alternate data streams and special files.
   ```

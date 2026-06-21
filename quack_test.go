@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -73,7 +74,7 @@ func TestParseQuackUnknownMatcher(t *testing.T) {
 func exerciseMatchers(t *testing.T, matchers []Matcher) {
 	t.Helper()
 	for _, m := range matchers {
-		m("c:\\programdata\\foobarba\\quack.exe")
+		m.Match("c:\\programdata\\foobarba\\quack.exe")
 	}
 }
 
@@ -116,6 +117,61 @@ func TestParseQuackExampleFile(t *testing.T) {
 		t.Fatalf("ParseQuack(example.quack): %v", err)
 	}
 	exerciseMatchers(t, matchers) // must not panic
+}
+
+// TestParseQuackPrefixes checks that parsed matchers carry the right literal
+// prefixes (so prunable can derive them) and that a single unprunable matcher
+// disables pruning.
+func TestParseQuackPrefixes(t *testing.T) {
+	matchers, _, err := ParseQuack(strings.NewReader("static\t/etc/passwd\nglob\t/var/log/**\nglob\t**/*.plist"))
+	if err != nil {
+		t.Fatalf("ParseQuack: %v", err)
+	}
+	prefixes, prune := prunable(matchers)
+	if want := []string{"/etc/passwd", "/var/log/", ""}; !slices.Equal(prefixes, want) {
+		t.Errorf("prefixes = %v, want %v", prefixes, want)
+	}
+	if prune {
+		t.Error("prune should be false: the leading-** glob has no literal prefix")
+	}
+
+	// A regex matcher is unprunable too (no literal-prefix extraction from regex),
+	// so its empty prefix disables pruning just like the leading-** glob does.
+	matchers, _, err = ParseQuack(strings.NewReader("glob\t/var/log/**\nregex\t^/etc/.*$"))
+	if err != nil {
+		t.Fatalf("ParseQuack: %v", err)
+	}
+	if prefixes, prune := prunable(matchers); prune {
+		t.Errorf("prune should be false: a regex matcher has no literal prefix (prefixes=%v)", prefixes)
+	}
+
+	// Drop both unprunable matchers and pruning becomes possible.
+	matchers, _, err = ParseQuack(strings.NewReader("static\t/etc/passwd\nglob\t/var/log/**"))
+	if err != nil {
+		t.Fatalf("ParseQuack: %v", err)
+	}
+	if prefixes, prune := prunable(matchers); !prune {
+		t.Errorf("prune should be true: every matcher has a literal prefix (prefixes=%v)", prefixes)
+	}
+}
+
+// TestParseQuackForceNoPrefix confirms force lines contribute no matcher (hence
+// no prefix) and do not disable pruning.
+func TestParseQuackForceNoPrefix(t *testing.T) {
+	matchers, forced, err := ParseQuack(strings.NewReader("force\t/some/path\nglob\t/var/log/**"))
+	if err != nil {
+		t.Fatalf("ParseQuack: %v", err)
+	}
+	prefixes, prune := prunable(matchers)
+	if want := []string{"/var/log/"}; !slices.Equal(prefixes, want) {
+		t.Errorf("prefixes = %v, want %v", prefixes, want)
+	}
+	if want := []string{"/some/path"}; !slices.Equal(forced, want) {
+		t.Errorf("forced = %v, want %v", forced, want)
+	}
+	if !prune {
+		t.Error("prune should be true: the force line does not disable pruning")
+	}
 }
 
 func TestParseQuackEmptyInput(t *testing.T) {

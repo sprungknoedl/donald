@@ -34,6 +34,9 @@ func walkNTFS(ntfs *parser.NTFSContext, root string, matchers []Matcher, set map
 		return targets, 0, fmt.Errorf("open mft: %w", err)
 	}
 
+	// Decide pruning once: it is a pure function of the loaded matchers.
+	prefixes, prune := prunable(matchers)
+
 	scanned := 0
 	err = walkDirRaw(ntfs, root, mft, func(path string, info *parser.FileInfo, err error) error {
 		if err != nil {
@@ -42,8 +45,13 @@ func walkNTFS(ntfs *parser.NTFSContext, root string, matchers []Matcher, set map
 			return fs.SkipDir
 		}
 
-		if info.IsDir && shouldSkipDir(set, path) {
-			return fs.SkipDir
+		if info.IsDir {
+			if shouldSkipDir(set, path) {
+				return fs.SkipDir
+			}
+			if prune && !shouldDescend(prefixes, strings.ToLower(path)) {
+				return fs.SkipDir
+			}
 		}
 
 		scanned++

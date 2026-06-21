@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"slices"
+	"sort"
 	"testing"
 
 	zip "github.com/sprungknoedl/zip"
@@ -130,6 +132,99 @@ func containsTarget(targets []CollectTarget, path string) bool {
 		}
 	}
 	return false
+}
+
+// sortedTargetPaths returns the targets' paths sorted, for set comparison.
+func sortedTargetPaths(targets []CollectTarget) []string {
+	paths := make([]string, 0, len(targets))
+	for _, tg := range targets {
+		paths = append(paths, tg.Path)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+// noopUnprunable returns a matcher with an empty literal prefix (so it disables
+// directory pruning) that matches nothing in the test image. Appending it forces
+// a full walk for differential comparison without changing the collected set —
+// the production seam for "pruning off", with no test-only branch in walkNTFS.
+func noopUnprunable(t *testing.T) Matcher {
+	return mustGlob(t, "**/__no_such_marker_zzz__/**")
+}
+
+// Case 1c: a focused literal prefix prunes the sibling subtrees — the nested
+// match is still collected, but the walk enumerates strictly fewer entries than
+// the unpruned run (the $Extend / $RECYCLE.BIN / System Volume Information
+// subtrees are never descended).
+func TestWalkNTFSFocusedPrunePrunes(t *testing.T) {
+	ntfs := loadTestNTFS(t)
+
+	matchers := []Matcher{mustGlob(t, "/Folder A/Folder B/*.txt")}
+	const child = "/Folder A/Folder B/Hello world text document.txt"
+
+	// The focused matcher's prefix is non-empty, so this walk prunes.
+	pruned, prunedScanned, err := walkNTFS(ntfs, "/", matchers, nil, nil)
+	if err != nil {
+		t.Fatalf("walkNTFS (pruned): %v", err)
+	}
+	// Adding the unprunable no-op matcher forces a full walk over the same matches.
+	full, fullScanned, err := walkNTFS(ntfs, "/", []Matcher{matchers[0], noopUnprunable(t)}, nil, nil)
+	if err != nil {
+		t.Fatalf("walkNTFS (full): %v", err)
+	}
+
+	if !containsTarget(pruned, child) {
+		t.Errorf("nested match %q should still be collected when pruning", child)
+	}
+	if prunedScanned >= fullScanned {
+		t.Errorf("pruning should enumerate fewer entries: pruned=%d, full=%d", prunedScanned, fullScanned)
+	}
+	if !slices.Equal(sortedTargetPaths(pruned), sortedTargetPaths(full)) {
+		t.Errorf("pruned set != unpruned set:\n pruned=%v\n full=%v", sortedTargetPaths(pruned), sortedTargetPaths(full))
+	}
+}
+
+// TestWalkNTFSPruningPreservesResults is the PRIMARY differential test for the
+// raw-NTFS codepath: each config walks the vendored image once with pruning as
+// the matchers imply and once with pruning forced off, asserting the collected
+// sets are identical. The shipped defaults are included so a future change that
+// wrongly enables pruning on them (their leading-** globs must keep it off) is
+// caught immediately.
+func TestWalkNTFSPruningPreservesResults(t *testing.T) {
+	ntfs := loadTestNTFS(t)
+
+	defMatchers, _, err := LoadMatchers(Configuration{})
+	if err != nil {
+		t.Fatalf("LoadMatchers (defaults): %v", err)
+	}
+	if _, prune := prunable(defMatchers); prune {
+		t.Error("shipped defaults must not enable pruning (leading-** globs)")
+	}
+
+	cases := []struct {
+		name     string
+		matchers []Matcher
+	}{
+		{"shipped defaults", defMatchers},
+		{"focused", []Matcher{mustGlob(t, "/Folder A/Folder B/*.txt")}},
+		{"mixed leading **", []Matcher{mustGlob(t, "/Folder A/Folder B/*.txt"), mustGlob(t, "**/*.txt")}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pruned, _, err := walkNTFS(ntfs, "/", tc.matchers, nil, nil)
+			if err != nil {
+				t.Fatalf("walkNTFS (pruned): %v", err)
+			}
+			// Force a full walk by adding the unprunable no-op matcher.
+			full, _, err := walkNTFS(ntfs, "/", append(slices.Clone(tc.matchers), noopUnprunable(t)), nil, nil)
+			if err != nil {
+				t.Fatalf("walkNTFS (full): %v", err)
+			}
+			if !slices.Equal(sortedTargetPaths(pruned), sortedTargetPaths(full)) {
+				t.Errorf("pruned set != unpruned set:\n pruned=%v\n full=%v", sortedTargetPaths(pruned), sortedTargetPaths(full))
+			}
+		})
+	}
 }
 
 // Case 2: collectFromNTFS extracts an alternate data stream and the archived

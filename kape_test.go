@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -40,7 +41,7 @@ func TestParseKapeRecursiveTarget(t *testing.T) {
 		t.Fatalf("matchers: got %d, want 1", len(matchers))
 	}
 	// Recursive + no FileMask -> "<path>\**", which should match nested files.
-	if !matchers[0]("c:\\windows\\system32\\winevt\\logs\\system.evtx") {
+	if !matchers[0].Match("c:\\windows\\system32\\winevt\\logs\\system.evtx") {
 		t.Error("recursive target should match a nested log file")
 	}
 }
@@ -77,10 +78,10 @@ func TestParseKapeFileMaskTarget(t *testing.T) {
 	if len(matchers) != 1 {
 		t.Fatalf("matchers: got %d, want 1", len(matchers))
 	}
-	if !matchers[0]("c:\\windows\\prefetch\\foo.pf") {
+	if !matchers[0].Match("c:\\windows\\prefetch\\foo.pf") {
 		t.Error("FileMask target should match a *.pf file")
 	}
-	if matchers[0]("c:\\windows\\prefetch\\foo.txt") {
+	if matchers[0].Match("c:\\windows\\prefetch\\foo.txt") {
 		t.Error("FileMask target should not match a non-.pf file")
 	}
 }
@@ -102,7 +103,7 @@ func TestParseKapeUserPlaceholder(t *testing.T) {
 		t.Fatalf("matchers: got %d, want 1", len(matchers))
 	}
 	// %user% is rewritten to * so any user's hive matches.
-	if !matchers[0]("c:\\users\\alice\\ntuser.dat") {
+	if !matchers[0].Match("c:\\users\\alice\\ntuser.dat") {
 		t.Error("%user% should expand to match any username")
 	}
 }
@@ -136,7 +137,7 @@ func TestParseKapeNestedReference(t *testing.T) {
 
 	matchAny := func(path string) bool {
 		for _, m := range matchers {
-			if m(path) {
+			if m.Match(path) {
 				return true
 			}
 		}
@@ -147,6 +148,49 @@ func TestParseKapeNestedReference(t *testing.T) {
 	}
 	if !matchAny("c:\\windows\\prefetch\\foo.pf") {
 		t.Error("compound should include the prefetch matcher")
+	}
+}
+
+// TestParseKapePrefixes confirms KAPE-generated globs carry a lowercased,
+// separator-preserved literal prefix, and that a target whose path begins with a
+// wildcard (here via the %user% placeholder) produces an empty prefix that
+// disables pruning.
+func TestParseKapePrefixes(t *testing.T) {
+	dir := writeKapeFixtures(t, map[string]string{
+		"evt.tkape": "" +
+			"Targets:\n" +
+			"  - Name: EventLogs\n" +
+			"    Path: C:\\Windows\\System32\\winevt\\Logs\n" +
+			"    FileMask: '*.evtx'\n",
+	})
+
+	matchers, _, err := ParseKapeTargets("evt", dir)
+	if err != nil {
+		t.Fatalf("ParseKapeTargets: %v", err)
+	}
+	prefixes, prune := prunable(matchers)
+	if want := []string{"c:\\windows\\system32\\winevt\\logs\\"}; !slices.Equal(prefixes, want) {
+		t.Errorf("prefixes = %v, want %v", prefixes, want)
+	}
+	if !prune {
+		t.Error("prune should be true: the generated glob has a literal prefix")
+	}
+
+	// A target whose Path is just %user% expands to a leading-* glob, whose empty
+	// literal prefix forces pruning off.
+	dir = writeKapeFixtures(t, map[string]string{
+		"any.tkape": "" +
+			"Targets:\n" +
+			"  - Name: AnyUser\n" +
+			"    Path: '%user%'\n" +
+			"    Recursive: true\n",
+	})
+	matchers, _, err = ParseKapeTargets("any", dir)
+	if err != nil {
+		t.Fatalf("ParseKapeTargets: %v", err)
+	}
+	if prefixes, prune := prunable(matchers); prune {
+		t.Errorf("prune should be false: a leading-wildcard glob has no literal prefix (prefixes=%v)", prefixes)
 	}
 }
 

@@ -48,7 +48,7 @@ func walkNTFS(ntfs *parser.NTFSContext, root string, matchers []Matcher, set map
 
 		scanned++
 		if !info.IsDir {
-			targets = appendIfMatch(targets, matchers, path, root)
+			targets = appendIfMatch(targets, matchers, path)
 		}
 
 		return nil

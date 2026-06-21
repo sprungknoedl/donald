@@ -109,6 +109,12 @@ though spaces are allowed inside the pattern itself.
 All matching is case-insensitive. Use the path separator of the target OS: `\` for
 Windows, `/` for macOS and Linux.
 
+Patterns are matched against the **full absolute path** of each enumerated file
+(e.g. `C:\Users\Alice\NTUSER.DAT`, `/etc/hosts`). Write `static`, `glob` and `regex`
+patterns as full absolute paths, or anchor a glob with a leading `**` to match at any
+depth. A pattern written relative to a custom `-root` (e.g. `\Windows\...` or
+`/Library/...`) will not match — make it absolute or `**`-prefixed.
+
 There are four pattern types:
 
 * **static** is an exact path. It's the fastest, so use it whenever you know the full

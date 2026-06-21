@@ -4,48 +4,48 @@ force	C:\$MFT
 force	C:\$Extend\$UsnJrnl:$J
 
 # == static matchers
-static	Windows\SchedLgU.Txt
-static	Windows\inf\setupapi.dev.log
-static	Windows\System32\drivers\etc\hosts
-static	Windows\System32\config\SAM
-static	Windows\System32\config\SYSTEM
-static	Windows\System32\config\SOFTWARE
-static	Windows\System32\config\SECURITY
-static	Windows\System32\config\SAM.LOG1
-static	Windows\System32\config\SYSTEM.LOG1
-static	Windows\System32\config\SOFTWARE.LOG1
-static	Windows\System32\config\SECURITY.LOG1
-static	Windows\System32\config\SAM.LOG2
-static	Windows\System32\config\SYSTEM.LOG2
-static	Windows\System32\config\SOFTWARE.LOG2
-static	Windows\System32\config\SECURITY.LOG2
+static	C:\Windows\SchedLgU.Txt
+static	C:\Windows\inf\setupapi.dev.log
+static	C:\Windows\System32\drivers\etc\hosts
+static	C:\Windows\System32\config\SAM
+static	C:\Windows\System32\config\SYSTEM
+static	C:\Windows\System32\config\SOFTWARE
+static	C:\Windows\System32\config\SECURITY
+static	C:\Windows\System32\config\SAM.LOG1
+static	C:\Windows\System32\config\SYSTEM.LOG1
+static	C:\Windows\System32\config\SOFTWARE.LOG1
+static	C:\Windows\System32\config\SECURITY.LOG1
+static	C:\Windows\System32\config\SAM.LOG2
+static	C:\Windows\System32\config\SYSTEM.LOG2
+static	C:\Windows\System32\config\SOFTWARE.LOG2
+static	C:\Windows\System32\config\SECURITY.LOG2
 
 # == glob matchers
-glob	Windows\Tasks\**
-glob	Windows\Prefetch\**
-glob	Windows\System32\sru\**
-glob	Windows\System32\winevt\Logs\**
-glob	Windows\System32\Tasks\**
-glob	Windows\System32\LogFiles\W3SVC1\**
-glob	Windows\Appcompat\Programs\**
-glob	ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\**
-glob	$Recycle.Bin\**\$I*
-glob	$Recycle.Bin\$I*
+glob	C:\Windows\Tasks\**
+glob	C:\Windows\Prefetch\**
+glob	C:\Windows\System32\sru\**
+glob	C:\Windows\System32\winevt\Logs\**
+glob	C:\Windows\System32\Tasks\**
+glob	C:\Windows\System32\LogFiles\W3SVC1\**
+glob	C:\Windows\Appcompat\Programs\**
+glob	C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\**
+glob	C:\$Recycle.Bin\**\$I*
+glob	C:\$Recycle.Bin\$I*
 
-glob	Users\*\NTUSER.DAT
-glob	Users\*\NTUSER.DAT.LOG1
-glob	Users\*\NTUSER.DAT.LOG2
-glob	Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat
-glob	Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG1
-glob	Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG2
-glob	Users\*\AppData\Local\Google\Chrome\User Data\Default\History
-glob	Users\*\AppData\Local\Microsoft\Edge\User Data\Default\History
-glob	Users\*\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline\ConsoleHost_history.txt
-glob	Users\*\AppData\Roaming\Microsoft\Windows\Recent\**
-glob	Users\*\AppData\Local\Microsoft\Windows\WebCache\**
-glob	Users\*\AppData\Roaming\Microsoft\Windows\Recent\AutomaticDestinations\**
-glob	Users\*\AppData\Roaming\Mozilla\Firefox\Profiles\**
-glob	Users\*\AppData\Local\ConnectedDevicesPlatform\**
-glob	Users\*\AppData\Local\Microsoft\Windows\Explorer\**
+glob	C:\Users\*\NTUSER.DAT
+glob	C:\Users\*\NTUSER.DAT.LOG1
+glob	C:\Users\*\NTUSER.DAT.LOG2
+glob	C:\Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat
+glob	C:\Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG1
+glob	C:\Users\*\AppData\Local\Microsoft\Windows\UsrClass.dat.LOG2
+glob	C:\Users\*\AppData\Local\Google\Chrome\User Data\Default\History
+glob	C:\Users\*\AppData\Local\Microsoft\Edge\User Data\Default\History
+glob	C:\Users\*\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline\ConsoleHost_history.txt
+glob	C:\Users\*\AppData\Roaming\Microsoft\Windows\Recent\**
+glob	C:\Users\*\AppData\Local\Microsoft\Windows\WebCache\**
+glob	C:\Users\*\AppData\Roaming\Microsoft\Windows\Recent\AutomaticDestinations\**
+glob	C:\Users\*\AppData\Roaming\Mozilla\Firefox\Profiles\**
+glob	C:\Users\*\AppData\Local\ConnectedDevicesPlatform\**
+glob	C:\Users\*\AppData\Local\Microsoft\Windows\Explorer\**
 
 # == regexp matchers

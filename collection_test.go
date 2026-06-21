@@ -86,11 +86,11 @@ func TestRegexpMatcherSubstringInsensitive(t *testing.T) {
 }
 
 func TestAppendIfMatchCaseInsensitive(t *testing.T) {
-	// Case-insensitivity now lives in appendIfMatch: a mixed-case path must
-	// still match, since appendIfMatch folds it before testing the matchers.
+	// Case-insensitivity lives in appendIfMatch: a mixed-case path must still
+	// match, since appendIfMatch folds it before testing the matchers.
 	matchers := []Matcher{mustGlob(t, "C:\\Users\\*\\NTUSER.DAT")}
 
-	got := appendIfMatch(nil, matchers, "C:\\Users\\Alice\\NTUSER.DAT", "C:\\")
+	got := appendIfMatch(nil, matchers, "C:\\Users\\Alice\\NTUSER.DAT")
 	if len(got) != 1 {
 		t.Fatalf("got %d targets, want 1", len(got))
 	}
@@ -102,7 +102,7 @@ func TestAppendIfMatchCaseInsensitive(t *testing.T) {
 func TestAppendIfMatchFullPath(t *testing.T) {
 	matchers := []Matcher{NewStaticMatcher("/etc/passwd")}
 
-	got := appendIfMatch(nil, matchers, "/etc/passwd", "/")
+	got := appendIfMatch(nil, matchers, "/etc/passwd")
 	if len(got) != 1 {
 		t.Fatalf("got %d targets, want 1", len(got))
 	}
@@ -111,26 +111,56 @@ func TestAppendIfMatchFullPath(t *testing.T) {
 	}
 }
 
-func TestAppendIfMatchTrimmedPath(t *testing.T) {
-	// The matcher only matches the root-trimmed form; appendIfMatch must still
-	// hit, and the recorded Path is the full path (not the trimmed one).
+// TestAppendIfMatchCustomRootRelative locks in the documented behavior change:
+// a pattern written relative to a non-root -root (here "/log/syslog" under root
+// "/var") used to match via the trimmed form and now does not — only the full
+// absolute path is tested.
+func TestAppendIfMatchCustomRootRelative(t *testing.T) {
 	matchers := []Matcher{NewStaticMatcher("/log/syslog")}
 
-	got := appendIfMatch(nil, matchers, "/var/log/syslog", "/var")
-	if len(got) != 1 {
-		t.Fatalf("got %d targets, want 1", len(got))
-	}
-	if got[0].Path != "/var/log/syslog" {
-		t.Errorf("Path = %q, want the full path /var/log/syslog", got[0].Path)
+	got := appendIfMatch(nil, matchers, "/var/log/syslog")
+	if len(got) != 0 {
+		t.Errorf("got %d targets, want 0: a root-relative pattern must no longer match the full path", len(got))
 	}
 }
 
 func TestAppendIfMatchNoMatch(t *testing.T) {
 	matchers := []Matcher{NewStaticMatcher("/etc/shadow")}
 
-	got := appendIfMatch(nil, matchers, "/etc/passwd", "/")
+	got := appendIfMatch(nil, matchers, "/etc/passwd")
 	if len(got) != 0 {
 		t.Errorf("got %d targets, want 0 (no matcher hit)", len(got))
+	}
+}
+
+// benchPaths is a representative slice exercised by BenchmarkAppendIfMatch: a
+// couple of static hits, a couple of glob hits, and several non-matching paths
+// (the overwhelmingly common case on a real volume).
+var benchPaths = []string{
+	"/etc/hosts",  // static hit (darwin/linux defaults)
+	"/etc/passwd", // static hit
+	"/Users/alice/Library/Application Support/Google/Chrome/Default/History", // glob hit
+	"/var/log/system.log",                          // glob hit (/var/log/**)
+	"/Users/alice/Documents/notes.txt",             // no match
+	"/usr/local/bin/tool",                          // no match
+	"/System/Library/Frameworks/Foo.framework/Foo", // no match
+	"/private/var/db/locate.database",              // no match
+}
+
+// BenchmarkAppendIfMatch measures the per-path matching hot path against the
+// current-OS default matcher set. b.ReportAllocs() makes the allocation cost of
+// the path fold(s) visible so the single-form change can be compared before/after.
+func BenchmarkAppendIfMatch(b *testing.B) {
+	matchers, _, err := LoadMatchers(Configuration{})
+	if err != nil {
+		b.Fatalf("LoadMatchers: %v", err)
+	}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		for _, p := range benchPaths {
+			appendIfMatch(nil, matchers, p)
+		}
 	}
 }
 

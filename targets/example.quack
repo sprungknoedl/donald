@@ -75,6 +75,13 @@
 #
 # All pattern matching is case insensitive.
 #
+# Patterns are matched against the FULL ABSOLUTE path of each enumerated file
+# (for example "C:\Users\Alice\NTUSER.DAT" on Windows, "/etc/hosts" on UNIX).
+# Write static, glob and regex patterns as full absolute paths, or anchor them
+# with a leading "**" (glob) so they match at any depth. A pattern written
+# relative to a custom -root (e.g. "\Windows\..." or "/Library/...") will NOT
+# match -- make it absolute ("C:\Windows\...") or "**"-prefixed.
+#
 # Please specify the path delimiter for the system targeted. This means "/" for
 # UNIX-like systems and "\" for Windows systems.
 #
@@ -88,7 +95,7 @@
 # enumeration to queue for collection.
 #
 # Examples:
-static	\Windows\System32\Config\SOFTWARE
+static	C:\Windows\System32\Config\SOFTWARE
 static	/etc/group
 
 #++++++++++++++++#
@@ -103,7 +110,7 @@ static	/etc/group
 # alternate data streams. 
 #
 # Examples:
-force	\$Extend\$UsnJrnl:$J
+force	C:\$Extend\$UsnJrnl:$J
 
 
 #++++++++++++++++#
@@ -134,9 +141,9 @@ glob	/var/log/**
 # extension or all files with the same name but differing extensions.
 #
 # Examples:
-glob	\Users\*\NTUser.dat
+glob	C:\Users\*\NTUser.dat
 glob	/home/*/.bash_history
-glob	\Users\*\Appdata\Roaming\Microsoft\Windows\Recent\*.lnk
+glob	C:\Users\*\Appdata\Roaming\Microsoft\Windows\Recent\*.lnk
 glob	/root/.*_history
 
 # Other patterns
@@ -149,8 +156,8 @@ glob	/root/.*_history
 # to specify the pattern, glob should be favored for performance reasons.
 #
 # Examples:
-glob	\Windows\Temp\[A-Z][A-Z][A-Z][A-Z]\*.exe
-glob	\ProgramData\[A-Z][A-Z][A-Z][A-Z].exe
+glob	C:\Windows\Temp\[A-Z][A-Z][A-Z][A-Z]\*.exe
+glob	C:\ProgramData\[A-Z][A-Z][A-Z][A-Z].exe
 glob	\**\*.docm
 glob	\**\r*.exe
 
@@ -172,5 +179,5 @@ glob	\**\r*.exe
 # start of a file path, and `$` to denote the end. 
 #
 # Examples:
-regex	^\\ProgramData\\[A-Za-z]{8}\\[A-Za-z]{5}\.exe$
+regex	^C:\\ProgramData\\[A-Za-z]{8}\\[A-Za-z]{5}\.exe$
 regex	[0-9]+\.exe

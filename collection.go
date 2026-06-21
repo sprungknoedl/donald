@@ -114,15 +114,16 @@ func loadTargetsAndRoots(cfg Configuration) (matchers []Matcher, targets []Colle
 	return matchers, targets, roots, skipDirSet(cfg), nil
 }
 
-// appendIfMatch tests path (and its root-trimmed form) against every matcher and
-// appends a "match" target on the first hit. Shared by the normal and raw walks.
-func appendIfMatch(targets []CollectTarget, matchers []Matcher, path, root string) []CollectTarget {
-	// Trim stays case-sensitive (as today); fold each form once so matchers
-	// operate on already-lowercased input instead of folding per call.
+// appendIfMatch tests path against every matcher, appending a "match" target on
+// the first hit. path is matched as the full absolute path only — the form both
+// walkers emit — so a pattern written relative to a non-root -root no longer
+// matches; write it absolute or with a leading **. Shared by the normal and raw
+// walks.
+func appendIfMatch(targets []CollectTarget, matchers []Matcher, path string) []CollectTarget {
+	// Fold the path once; every matcher reuses the lowercased form.
 	pathLower := strings.ToLower(path)
-	pathTrimmedLower := strings.ToLower(strings.TrimPrefix(path, root))
 	for _, match := range matchers {
-		if match(pathLower) || match(pathTrimmedLower) {
+		if match(pathLower) {
 			return append(targets, CollectTarget{Path: path, Source: "match"})
 		}
 	}
@@ -150,7 +151,7 @@ func GetPaths(cfg Configuration) ([]CollectTarget, error) {
 
 			scanned++
 			if !info.IsDir() {
-				targets = appendIfMatch(targets, matchers, path, root)
+				targets = appendIfMatch(targets, matchers, path)
 			}
 
 			return nil

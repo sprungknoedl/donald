@@ -135,7 +135,7 @@ func TestAppendIfMatchNoMatch(t *testing.T) {
 }
 
 func TestNewHashers(t *testing.T) {
-	w, finish := newHashers()
+	w, finish := NewHashers()
 	if _, err := io.WriteString(w, "abc"); err != nil {
 		t.Fatalf("write: %v", err)
 	}

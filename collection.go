@@ -71,7 +71,7 @@ func LoadMatchers(cfg Configuration) ([]Matcher, []string, error) {
 
 // skipDirSet builds the lowercased set of directories to prune during traversal.
 // It uses cfg.SkipDirs when given, otherwise the per-OS DefaultSkipDirs() — same
-// replace-not-add precedence as -root / DefaulRootPaths.
+// replace-not-add precedence as -root / DefaultRootPaths.
 func skipDirSet(cfg Configuration) map[string]bool {
 	dirs := cfg.SkipDirs
 	if len(dirs) == 0 {
@@ -108,7 +108,7 @@ func loadTargetsAndRoots(cfg Configuration) (matchers []Matcher, targets []Colle
 
 	roots = cfg.CollectionRoots
 	if len(roots) == 0 {
-		roots = DefaulRootPaths()
+		roots = DefaultRootPaths()
 	}
 
 	return matchers, targets, roots, skipDirSet(cfg), nil
@@ -198,11 +198,11 @@ func createNamedEntry(cfg Configuration, archive *zip.Writer, name string, modTi
 	return createEntry(cfg, archive, &zip.FileHeader{Name: name, Modified: modTime})
 }
 
-// newHashers returns a writer feeding both a SHA-256 and an MD5 hasher and a
+// NewHashers returns a writer feeding both a SHA-256 and an MD5 hasher and a
 // finish func returning their hex digests. Collection tees the source→archive
 // copy through the writer so the digests cover the plaintext source bytes with
 // no extra read.
-func newHashers() (w io.Writer, finish func() (sha256sum, md5sum string)) {
+func NewHashers() (w io.Writer, finish func() (sha256sum, md5sum string)) {
 	h256 := sha256.New()
 	hmd5 := md5.New()
 	return io.MultiWriter(h256, hmd5), func() (string, string) {
@@ -240,7 +240,7 @@ func CollectFile(cfg Configuration, archive *zip.Writer, path string) (string, i
 
 	// Tee the source→archive copy through the hashers: digests cover the
 	// plaintext source bytes, with no extra read. size is the bytes streamed.
-	hashes, digests := newHashers()
+	hashes, digests := NewHashers()
 	size, err := io.Copy(io.MultiWriter(w, hashes), r)
 	if err != nil {
 		return rel, 0, "", "", err

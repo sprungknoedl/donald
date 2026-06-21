@@ -6,7 +6,7 @@ import (
 	zip "github.com/sprungknoedl/zip"
 )
 
-func DefaulRootPaths() []string {
+func DefaultRootPaths() []string {
 	return []string{
 		"/",
 	}

@@ -76,7 +76,7 @@ func collectFromNTFS(cfg Configuration, archive *zip.Writer, ntfs *parser.NTFSCo
 
 	// Tap the digests off the streaming read: hash the source bytes as they
 	// are written to the archive, with no second read.
-	hashes, digests := newHashers()
+	hashes, digests := NewHashers()
 	offset := int64(0)
 	size := int64(0)
 	for {

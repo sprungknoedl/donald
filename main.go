@@ -334,7 +334,7 @@ func ParseConfig() (Configuration, error) {
 	flag.StringVar(&cfg.DagobertKey, "dagobert-key", "", "Dagobert API Key")
 	flag.StringVar(&cfg.DagobertFile, "dagobert-file", hostname+"-"+now+".zip", "Defines the name of the zip archive created on the SFTP server.")
 
-	defaultRoots := strings.Join(DefaulRootPaths(), ", ")
+	defaultRoots := strings.Join(DefaultRootPaths(), ", ")
 	usageRoots := fmt.Sprintf("Defines the search root path(s). If multiple root paths are given, they are traversed in order. (default %q)", defaultRoots)
 	flag.Func("root", usageRoots, func(s string) error {
 		cfg.CollectionRoots = append(cfg.CollectionRoots, s)

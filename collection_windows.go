@@ -14,7 +14,7 @@ import (
 //go:embed targets/default_windows.quack
 var defaultQuack []byte
 
-func DefaulRootPaths() []string {
+func DefaultRootPaths() []string {
 	return []string{
 		"C:\\",
 	}

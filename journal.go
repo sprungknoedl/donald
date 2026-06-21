@@ -183,7 +183,7 @@ func (j *Journal) Flush(cfg Configuration, archive *zip.Writer) error {
 
 	roots := cfg.CollectionRoots
 	if len(roots) == 0 {
-		roots = DefaulRootPaths()
+		roots = DefaultRootPaths()
 	}
 	host, _ := os.Hostname()
 	finished := time.Now().UTC()

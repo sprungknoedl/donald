@@ -97,17 +97,29 @@ func convert(targets map[string]string, name string) ([]Matcher, []string, error
 		case t.FileMask == "" && t.Recursive:
 			pattern := fmt.Sprintf("%s\\**", strings.TrimSuffix(t.Path, "\\"))
 			pattern = strings.ReplaceAll(pattern, "%user%", "*")
-			matchers = append(matchers, NewGlobMatcher(pattern))
+			matcher, err := NewGlobMatcher(pattern)
+			if err != nil {
+				return nil, nil, fmt.Errorf("invalid glob %q: %w", pattern, err)
+			}
+			matchers = append(matchers, matcher)
 
 		case t.FileMask == "" && !t.Recursive:
 			pattern := fmt.Sprintf("%s\\*", strings.TrimSuffix(t.Path, "\\"))
 			pattern = strings.ReplaceAll(pattern, "%user%", "*")
-			matchers = append(matchers, NewGlobMatcher(pattern))
+			matcher, err := NewGlobMatcher(pattern)
+			if err != nil {
+				return nil, nil, fmt.Errorf("invalid glob %q: %w", pattern, err)
+			}
+			matchers = append(matchers, matcher)
 
 		case t.FileMask != "":
 			pattern := fmt.Sprintf("%s\\%s", strings.TrimSuffix(t.Path, "\\"), t.FileMask)
 			pattern = strings.ReplaceAll(pattern, "%user%", "*")
-			matchers = append(matchers, NewGlobMatcher(pattern))
+			matcher, err := NewGlobMatcher(pattern)
+			if err != nil {
+				return nil, nil, fmt.Errorf("invalid glob %q: %w", pattern, err)
+			}
+			matchers = append(matchers, matcher)
 
 		default:
 			return nil, nil, fmt.Errorf("unsupported kape target: %+v", t)

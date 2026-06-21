@@ -31,17 +31,25 @@ func NewStaticMatcher(pattern string) Matcher {
 	}
 }
 
-func NewGlobMatcher(pattern string) Matcher {
+func NewGlobMatcher(pattern string) (Matcher, error) {
 	pattern = strings.ReplaceAll(pattern, "\\", "\\\\")
-	m, _ := glob.Compile(strings.ToLower(pattern))
+	m, err := glob.Compile(strings.ToLower(pattern))
+	if err != nil {
+		return nil, err
+	}
 	return func(filename string) bool {
 		return m.Match(filename)
-	}
+	}, nil
 }
 
-func NewRegexpMatcher(pattern string) Matcher {
-	re, _ := regexp.Compile("(?i)" + pattern)
-	return re.MatchString
+func NewRegexpMatcher(pattern string) (Matcher, error) {
+	re, err := regexp.Compile("(?i)" + pattern)
+	if err != nil {
+		// regexp wraps its message in "error parsing regexp: "; drop it since
+		// the caller already labels the failure as an invalid regex.
+		return nil, fmt.Errorf("%s", strings.TrimPrefix(err.Error(), "error parsing regexp: "))
+	}
+	return re.MatchString, nil
 }
 
 func LoadMatchers(cfg Configuration) ([]Matcher, []string, error) {

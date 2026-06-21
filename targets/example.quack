@@ -172,5 +172,5 @@ glob	\**\r*.exe
 # start of a file path, and `$` to denote the end. 
 #
 # Examples:
-regex	^\ProgramData\[A-Za-z]{8}\[A-Za-z]{5}.exe$
-regex	[0-9]+.exe
+regex	^\\ProgramData\\[A-Za-z]{8}\\[A-Za-z]{5}\.exe$
+regex	[0-9]+\.exe

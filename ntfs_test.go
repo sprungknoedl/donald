@@ -69,7 +69,7 @@ func TestWalkNTFSMatchesNestedFile(t *testing.T) {
 	ntfs := loadTestNTFS(t)
 
 	// Glob over the forward-slash paths the walk yields when rooted at "/".
-	matchers := []Matcher{NewGlobMatcher("/Folder A/Folder B/*.txt")}
+	matchers := []Matcher{mustGlob(t, "/Folder A/Folder B/*.txt")}
 
 	targets, scanned, err := walkNTFS(ntfs, "/", matchers, nil)
 	if err != nil {

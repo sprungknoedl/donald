@@ -31,10 +31,18 @@ func ParseQuack(r io.Reader) ([]Matcher, []string, error) {
 			m = append(m, NewStaticMatcher(pattern))
 
 		case "glob":
-			m = append(m, NewGlobMatcher(pattern))
+			matcher, err := NewGlobMatcher(pattern)
+			if err != nil {
+				return nil, nil, fmt.Errorf("line %d: invalid glob: %w", line, err)
+			}
+			m = append(m, matcher)
 
 		case "regex":
-			m = append(m, NewRegexpMatcher(pattern))
+			matcher, err := NewRegexpMatcher(pattern)
+			if err != nil {
+				return nil, nil, fmt.Errorf("line %d: invalid regex: %w", line, err)
+			}
+			m = append(m, matcher)
 
 		case "force":
 			paths = append(paths, pattern)

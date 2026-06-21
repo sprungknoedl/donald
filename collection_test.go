@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+// mustGlob / mustRegexp build a matcher from a pattern expected to be valid,
+// failing the test if compilation errors.
+func mustGlob(t *testing.T, pattern string) Matcher {
+	t.Helper()
+	m, err := NewGlobMatcher(pattern)
+	if err != nil {
+		t.Fatalf("NewGlobMatcher(%q): %v", pattern, err)
+	}
+	return m
+}
+
+func mustRegexp(t *testing.T, pattern string) Matcher {
+	t.Helper()
+	m, err := NewRegexpMatcher(pattern)
+	if err != nil {
+		t.Fatalf("NewRegexpMatcher(%q): %v", pattern, err)
+	}
+	return m
+}
+
 func TestStaticMatcherCaseInsensitive(t *testing.T) {
 	// Matchers receive already-lowercased input; the constructor folds the
 	// pattern so a mixed-case pattern still matches the lowercased path.
@@ -21,7 +41,7 @@ func TestStaticMatcherCaseInsensitive(t *testing.T) {
 func TestGlobMatcherWindowsBackslashes(t *testing.T) {
 	// Backslashes are escaped by NewGlobMatcher so Windows separators are
 	// treated literally rather than as glob escapes. Input is pre-lowercased.
-	m := NewGlobMatcher("C:\\Users\\*\\NTUSER.DAT")
+	m := mustGlob(t, "C:\\Users\\*\\NTUSER.DAT")
 
 	if !m("c:\\users\\alice\\ntuser.dat") {
 		t.Error("glob should match a lowercased Windows path")
@@ -32,7 +52,7 @@ func TestGlobMatcherWindowsBackslashes(t *testing.T) {
 }
 
 func TestRegexpMatcherSubstringInsensitive(t *testing.T) {
-	m := NewRegexpMatcher("system32")
+	m := mustRegexp(t, "system32")
 
 	if !m("c:\\windows\\system32\\cmd.exe") {
 		t.Error("regex should match as a substring of the lowercased path")
@@ -45,7 +65,7 @@ func TestRegexpMatcherSubstringInsensitive(t *testing.T) {
 func TestAppendIfMatchCaseInsensitive(t *testing.T) {
 	// Case-insensitivity now lives in appendIfMatch: a mixed-case path must
 	// still match, since appendIfMatch folds it before testing the matchers.
-	matchers := []Matcher{NewGlobMatcher("C:\\Users\\*\\NTUSER.DAT")}
+	matchers := []Matcher{mustGlob(t, "C:\\Users\\*\\NTUSER.DAT")}
 
 	got := appendIfMatch(nil, matchers, "C:\\Users\\Alice\\NTUSER.DAT", "C:\\")
 	if len(got) != 1 {

@@ -81,27 +81,27 @@ func main() {
 
 	paths, err := step1TraverseFS(cfg)
 	if err != nil {
-		ErrLogger.Fatalf("Stage 1: Unrecoverable error: %v", err)
+		ErrLogger.Fatalf("Stage 1: %v", err)
 	}
 
 	sum, err := step2CollectFiles(cfg, paths)
 	if err != nil {
-		ErrLogger.Fatalf("Stage 2: Unrecoverable error: %v", err)
+		ErrLogger.Fatalf("Stage 2: %v", err)
 	}
 
 	err = step3UploadSFTP(cfg, sum)
 	if err != nil {
-		ErrLogger.Fatalf("Stage 3 (SFTP): Unrecoverable error: %v", err)
+		ErrLogger.Fatalf("Stage 3 (SFTP): %v", err)
 	}
 
 	err = step3UploadDagobert(cfg, sum)
 	if err != nil {
-		ErrLogger.Fatalf("Stage 3 (Dagobert): Unrecoverable error: %v", err)
+		ErrLogger.Fatalf("Stage 3 (Dagobert): %v", err)
 	}
 
 	err = step4CleanUp(cfg)
 	if err != nil {
-		ErrLogger.Fatalf("Stage 4: Unrecoverable error: %v", err)
+		ErrLogger.Fatalf("Stage 4: %v", err)
 	}
 }
 

@@ -187,30 +187,35 @@ func TestWalkNTFSFocusedPrunePrunes(t *testing.T) {
 // TestWalkNTFSPruningPreservesResults is the PRIMARY differential test for the
 // raw-NTFS codepath: each config walks the vendored image once with pruning as
 // the matchers imply and once with pruning forced off, asserting the collected
-// sets are identical. The shipped defaults are included so a future change that
-// wrongly enables pruning on them (their leading-** globs must keep it off) is
-// caught immediately.
+// sets are identical. Each case also pins whether the matcher shape enables
+// pruning, so a future change to prunable() — e.g. one that wrongly prunes a
+// leading-** glob, which must stay off — is caught immediately. The shapes are
+// spelled out explicitly rather than read from the OS-specific shipped defaults
+// so the test asserts the same desired behaviour on every platform.
 func TestWalkNTFSPruningPreservesResults(t *testing.T) {
 	ntfs := loadTestNTFS(t)
 
-	defMatchers, _, err := LoadMatchers(Configuration{})
-	if err != nil {
-		t.Fatalf("LoadMatchers (defaults): %v", err)
-	}
-	if _, prune := prunable(defMatchers); prune {
-		t.Error("shipped defaults must not enable pruning (leading-** globs)")
-	}
-
 	cases := []struct {
-		name     string
-		matchers []Matcher
+		name      string
+		matchers  []Matcher
+		wantPrune bool
 	}{
-		{"shipped defaults", defMatchers},
-		{"focused", []Matcher{mustGlob(t, "/Folder A/Folder B/*.txt")}},
-		{"mixed leading **", []Matcher{mustGlob(t, "/Folder A/Folder B/*.txt"), mustGlob(t, "**/*.txt")}},
+		// A leading-** glob has no literal prefix, so it must disable pruning
+		// for the whole set (this is the shape the darwin/windows defaults use).
+		{"leading **", []Matcher{mustGlob(t, "**/*.txt")}, false},
+		// A glob with a literal prefix anchors its matches, so pruning is on
+		// (this is the shape the fully path-anchored linux defaults use).
+		{"focused", []Matcher{mustGlob(t, "/Folder A/Folder B/*.txt")}, true},
+		// One unprunable matcher in the set forces a full walk, so mixing a
+		// prefixed glob with a leading-** glob still disables pruning.
+		{"mixed leading **", []Matcher{mustGlob(t, "/Folder A/Folder B/*.txt"), mustGlob(t, "**/*.txt")}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			if _, prune := prunable(tc.matchers); prune != tc.wantPrune {
+				t.Errorf("prunable = %v, want %v", prune, tc.wantPrune)
+			}
+
 			pruned, _, err := walkNTFS(ntfs, "/", tc.matchers, nil, nil)
 			if err != nil {
 				t.Fatalf("walkNTFS (pruned): %v", err)

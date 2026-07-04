@@ -1,4 +1,4 @@
-.PHONY: build check fmt vet test all clean
+.PHONY: build check fmt vet test fuzz all clean
 
 build:
 	go build -o donald
@@ -19,6 +19,13 @@ vet:
 
 test:
 	go test ./...
+
+# Local/on-demand fuzzing; go allows only one fuzz target per invocation.
+fuzz:
+	go test -run '^$$' -fuzz '^FuzzParseQuack$$' -fuzztime 30s .
+	go test -run '^$$' -fuzz '^FuzzGlobMatcherPrefix$$' -fuzztime 30s .
+	go test -run '^$$' -fuzz '^FuzzShouldDescend$$' -fuzztime 30s .
+	go test -run '^$$' -fuzz '^FuzzSectorReaderAt$$' -fuzztime 30s .
 
 all:
 	GOOS=linux GOARCH=amd64 go build -o donald-linux-amd64

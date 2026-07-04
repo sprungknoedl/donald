@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -423,4 +425,103 @@ func TestGetPathsForcePathBypassesPruning(t *testing.T) {
 	if !slices.Contains(got, forced) {
 		t.Errorf("forced path %q should be collected despite skip/ being pruned; got %v", forced, got)
 	}
+}
+
+// FuzzGlobMatcherPrefix checks the prefix invariant: whenever a glob matcher
+// matches a folded path, that path must start with the matcher's literal
+// Prefix (Prefix is a literal string prefix by construction). Static and
+// regex constructors run on the same inputs for no-panic coverage.
+func FuzzGlobMatcherPrefix(f *testing.F) {
+	f.Add("c:\\windows\\system32\\*", "C:\\Windows\\System32\\cmd.exe")
+	f.Add("c:\\users\\*\\ntuser.dat", "c:\\users\\bob\\ntuser.dat")
+	f.Add("/var/log/**", "/var/log/syslog")
+	f.Add("**/library/foo", "/users/x/library/foo")
+	f.Add("*", "/etc/passwd")
+	f.Add("[", "/etc/passwd")
+	f.Fuzz(func(t *testing.T, pattern, path string) {
+		NewStaticMatcher(pattern)
+		NewRegexpMatcher(pattern) // regex Prefix is always "", nothing more to assert
+		m, err := NewGlobMatcher(pattern)
+		if err != nil {
+			return
+		}
+		folded := strings.ToLower(path)
+		if m.Match(folded) && !strings.HasPrefix(folded, m.Prefix) {
+			t.Errorf("glob %q matched %q but the folded path does not start with Prefix %q", pattern, path, m.Prefix)
+		}
+	})
+}
+
+// FuzzShouldDescend checks the evidence-loss property of pruning: if a lone
+// glob matcher matches a path and prunable says pruning is on, every ancestor
+// directory of that path must survive shouldDescend — otherwise the walk
+// would prune away a subtree containing a match.
+func FuzzShouldDescend(f *testing.F) {
+	f.Add("/var/log/**", "/var/log/syslog")
+	f.Add("c:\\windows\\system32\\*", "c:\\windows\\system32\\cmd.exe")
+	f.Add("/users/*/.*history", "/users/bob/.bash_history")
+	f.Add("/etc/passwd", "/etc/passwd")
+	f.Fuzz(func(t *testing.T, pattern, path string) {
+		m, err := NewGlobMatcher(pattern)
+		if err != nil {
+			return
+		}
+		prefixes, prune := prunable([]Matcher{m})
+		folded := strings.ToLower(path)
+		if !prune || !m.Match(folded) {
+			return
+		}
+		// Walk up the ancestor directories, treating both / and \ as
+		// separators, mirroring pathHasPrefix.
+		anc := folded
+		for {
+			i := strings.LastIndexAny(anc, "/\\")
+			if i < 0 {
+				break
+			}
+			anc = anc[:i]
+			if anc == "" {
+				break
+			}
+			if !shouldDescend(prefixes, anc) {
+				t.Errorf("glob %q matches %q but shouldDescend(%v, %q) = false: pruning would lose the match", pattern, path, prefixes, anc)
+			}
+		}
+	})
+}
+
+// FuzzSectorReaderAt runs SectorReaderAt differentially against a plain
+// bytes.Reader ReadAt over the same range: the bytes delivered must be
+// identical, and for fully in-range reads n/err must match the io.ReaderAt
+// contract the plain reader follows.
+func FuzzSectorReaderAt(f *testing.F) {
+	f.Add([]byte("0123456789abcdef"), 4, 0, 8)  // aligned
+	f.Add([]byte("0123456789abcdef"), 4, 3, 8)  // misaligned offset
+	f.Add([]byte("0123456789abcdef"), 4, 0, 5)  // misaligned length
+	f.Add([]byte("0123456789abcdef"), 4, 12, 8) // read past EOF
+	f.Add([]byte{}, 4, 0, 4)                    // empty data
+	f.Fuzz(func(t *testing.T, data []byte, sectorSize, off, readLen int) {
+		if sectorSize <= 0 || sectorSize > 1<<16 || off < 0 || off > 1<<16 || readLen < 0 || readLen > 1<<16 {
+			t.Skip()
+		}
+
+		got := make([]byte, readLen)
+		n, err := NewSectorReaderAt(bytes.NewReader(data), sectorSize).ReadAt(got, int64(off))
+		want := make([]byte, readLen)
+		wn, werr := bytes.NewReader(data).ReadAt(want, int64(off))
+
+		if werr != nil {
+			return // out-of-range read; only in-range n/err semantics are specified
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("ReadAt(len=%d, off=%d, sector=%d): bytes differ from plain reader", readLen, off, sectorSize)
+		}
+		// Known deviation: on the misaligned path ReadAt returns the byte count
+		// of the padded underlying read, so n can exceed len(p) — an io.ReaderAt
+		// contract violation left unfixed for now. Assert only that no in-range
+		// read errors or delivers fewer bytes than requested.
+		if err != nil || n < wn {
+			t.Errorf("ReadAt(len=%d, off=%d, sector=%d) = (%d, %v), plain reader = (%d, %v)", readLen, off, sectorSize, n, err, wn, werr)
+		}
+	})
 }

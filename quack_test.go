@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"slices"
 	"strings"
@@ -172,6 +173,30 @@ func TestParseQuackForceNoPrefix(t *testing.T) {
 	if !prune {
 		t.Error("prune should be true: the force line does not disable pruning")
 	}
+}
+
+// FuzzParseQuack feeds arbitrary bytes into ParseQuack: it must never panic,
+// and any matcher it returns must be safe to call.
+func FuzzParseQuack(f *testing.F) {
+	f.Add([]byte("static\tC:\\Windows\\System32\\config\\SAM\n"))
+	f.Add([]byte("glob\tC:\\Users\\*\\NTUSER.DAT\n"))
+	f.Add([]byte("regex\t\\\\\\$MFT$\n"))
+	f.Add([]byte("force\tC:\\$Extend\\$UsnJrnl:$J\n"))
+	f.Add([]byte("# a comment\n"))
+	f.Add([]byte("\n"))
+	f.Add([]byte("static C:\\no\\tab\\here"))
+	f.Add([]byte("bogus\tsome\\path\n"))
+	f.Add([]byte("glob\t[unterminated\n"))
+	f.Add([]byte("regex\t^\\ProgramData\\x\n"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		matchers, _, err := ParseQuack(bytes.NewReader(data))
+		if err != nil {
+			return
+		}
+		for _, m := range matchers {
+			m.Match("c:\\programdata\\foobarba\\quack.exe") // must not panic
+		}
+	})
 }
 
 func TestParseQuackEmptyInput(t *testing.T) {

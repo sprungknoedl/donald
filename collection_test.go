@@ -46,7 +46,10 @@ func TestLiteralGlobPrefix(t *testing.T) {
 		{"?foo", ""},
 		{"[abc]/x", ""},
 		{"{a,b}/x", ""},
-		{"/foo[0-9]/bar", "/foo"},
+		// The prefix never ends mid-segment: it is truncated back to the last
+		// separator before the first meta char, since matches (e.g. /foo5/bar)
+		// live in sibling dirs a mid-segment prefix would prune away.
+		{"/foo[0-9]/bar", "/"},
 		{"/path with spaces/*", "/path with spaces/"},
 		// Backslashes are literal path separators, not glob escapes (NewGlobMatcher
 		// escapes them to match literally), so the extracted prefix keeps them.
@@ -427,6 +430,59 @@ func TestGetPathsForcePathBypassesPruning(t *testing.T) {
 	}
 }
 
+// TestGlobStarStopsAtSeparators pins the segment-scoped glob semantics: * and ?
+// stay within one path segment (both separator styles); only ** crosses
+// directories.
+func TestGlobStarStopsAtSeparators(t *testing.T) {
+	cases := []struct {
+		pattern, path string
+		want          bool
+	}{
+		{"/var/log*", "/var/log2", true},
+		{"/var/log*", "/var/log2/x", false}, // * must not cross /
+		{"/var/**", "/var/log2/x", true},    // ** does cross
+		{"c:\\users\\*", "c:\\users\\bob", true},
+		{"c:\\users\\*", "c:\\users\\bob\\ntuser.dat", false}, // * must not cross \
+		{"c:\\users\\**", "c:\\users\\bob\\ntuser.dat", true},
+		{"/etc/host?", "/etc/hosts", true},
+		{"/etc/host?", "/etc/host/", false}, // ? must not match a separator
+	}
+	for _, tc := range cases {
+		m := mustGlob(t, tc.pattern)
+		if got := m.Match(tc.path); got != tc.want {
+			t.Errorf("glob %q Match(%q) = %v, want %v", tc.pattern, tc.path, got, tc.want)
+		}
+	}
+}
+
+// TestShouldDescendMidSegmentGlob is the unit-test twin of the
+// FuzzShouldDescend corpus finding (glob "/vA*" vs path "/vA0/..."): a glob
+// whose first meta char sits mid-segment must not let pruning skip the sibling
+// directories its matches live in. The prefix is truncated back to the last
+// separator, so every ancestor of a match survives shouldDescend.
+func TestShouldDescendMidSegmentGlob(t *testing.T) {
+	for _, tc := range []struct {
+		pattern string
+		dirs    []string // ancestor dirs of a real match, all must be descended
+	}{
+		{"/va*", []string{"/"}},
+		{"/var/log*/x", []string{"/var", "/var/log2"}},
+		{"c:\\users\\bo*\\ntuser.dat", []string{"c:", "c:\\users", "c:\\users\\bob"}},
+	} {
+		m := mustGlob(t, tc.pattern)
+		prefixes, prune := prunable([]Matcher{m})
+		if !prune {
+			t.Errorf("glob %q: pruning unexpectedly disabled (prefixes=%v)", tc.pattern, prefixes)
+			continue
+		}
+		for _, dir := range tc.dirs {
+			if !shouldDescend(prefixes, dir) {
+				t.Errorf("glob %q: shouldDescend(%v, %q) = false, would prune a subtree containing a match", tc.pattern, prefixes, dir)
+			}
+		}
+	}
+}
+
 // FuzzGlobMatcherPrefix checks the prefix invariant: whenever a glob matcher
 // matches a folded path, that path must start with the matcher's literal
 // Prefix (Prefix is a literal string prefix by construction). Static and
@@ -516,11 +572,7 @@ func FuzzSectorReaderAt(f *testing.F) {
 		if !bytes.Equal(got, want) {
 			t.Errorf("ReadAt(len=%d, off=%d, sector=%d): bytes differ from plain reader", readLen, off, sectorSize)
 		}
-		// Known deviation: on the misaligned path ReadAt returns the byte count
-		// of the padded underlying read, so n can exceed len(p) — an io.ReaderAt
-		// contract violation left unfixed for now. Assert only that no in-range
-		// read errors or delivers fewer bytes than requested.
-		if err != nil || n < wn {
+		if err != nil || n != wn {
 			t.Errorf("ReadAt(len=%d, off=%d, sector=%d) = (%d, %v), plain reader = (%d, %v)", readLen, off, sectorSize, n, err, wn, werr)
 		}
 	})

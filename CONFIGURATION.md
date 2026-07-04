@@ -123,8 +123,9 @@ There are four pattern types:
   static	C:\Windows\System32\config\SAM
   ```
 * **glob** uses [gobwas/glob](https://github.com/gobwas/glob) patterns (`**`, `*`, char
-  classes). It's faster than regex, so prefer it for matching by name or extension, or for
-  grabbing a folder recursively.
+  classes). `*`, `?` and char classes match within a single path segment (they stop at
+  `/` and `\`); only `**` crosses directories. It's faster than regex, so prefer it for
+  matching by name or extension, or for grabbing a folder recursively.
   ```
   glob	C:\Users\*\ntuser.dat            # NTUSER.DAT from every user
   glob	C:\**\malware.exe                # malware.exe in any folder

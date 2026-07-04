@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gobwas/glob"
@@ -44,17 +45,42 @@ func NewStaticMatcher(pattern string) Matcher {
 }
 
 func NewGlobMatcher(pattern string) (Matcher, error) {
+	// NUL is never valid in a path, and gobwas/glob mishandles it (the compiled
+	// glob can match paths that do not start with the literal prefix), so reject
+	// it up front to keep the Prefix invariant intact.
+	if strings.ContainsRune(pattern, 0) {
+		return Matcher{}, fmt.Errorf("pattern contains NUL byte")
+	}
+
 	// The prefix is the literal run before the first glob meta character, taken
 	// from the raw pattern (before backslash-escaping) so it keeps the same
 	// separator form the walked directory paths use.
 	prefix := strings.ToLower(literalGlobPrefix(pattern))
 	pattern = strings.ReplaceAll(pattern, "\\", "\\\\")
-	m, err := glob.Compile(strings.ToLower(pattern))
+	// Compile with both path separators so * and ? stay within one path segment
+	// (KAPE/CyLR-style); only ** crosses directories. This is also what keeps
+	// segment-boundary pruning (shouldDescend) evidence-preserving.
+	m, err := glob.Compile(strings.ToLower(pattern), '/', '\\')
 	if err != nil {
 		return Matcher{}, err
 	}
+
+	// gobwas/glob can compile malformed patterns (e.g. an unterminated "{") into
+	// matchers that panic at match time. Recover so one bad target cannot kill a
+	// collection mid-walk: a panicking pattern counts as no-match, warned once.
+	var warn sync.Once
 	return Matcher{
-		Match:  func(filename string) bool { return m.Match(filename) },
+		Match: func(filename string) (matched bool) {
+			defer func() {
+				if r := recover(); r != nil {
+					warn.Do(func() {
+						WarnLogger.Printf("glob %q panicked while matching, treating as no-match: %v", pattern, r)
+					})
+					matched = false
+				}
+			}()
+			return m.Match(filename)
+		},
 		Prefix: prefix,
 	}, nil
 }
@@ -74,18 +100,25 @@ func NewRegexpMatcher(pattern string) (Matcher, error) {
 	return Matcher{Match: re.MatchString, Prefix: ""}, nil
 }
 
-// literalGlobPrefix returns the leading run of pattern that contains no glob meta
-// character, i.e. the literal path prefix every match must start with. The meta
-// characters are *, ?, [ and { (gobwas/glob's openers); a pattern that starts
-// with one yields "" (no usable prefix). Backslashes are treated as ordinary path
-// bytes, not glob escapes — NewGlobMatcher escapes them so Windows separators
-// match literally, so the extracted prefix keeps them in the same separator form
-// the walked directory paths use.
+// literalGlobPrefix returns the literal path prefix every match must start with:
+// the leading run of pattern before the first glob meta character (*, ? [ and { —
+// gobwas/glob's openers), truncated back to the last path separator so it never
+// ends mid-segment — "/var/log*/x" yields "/var/", not "/var/log", because the
+// matches live under /var/log2 etc., which segment-boundary pruning
+// (shouldDescend) would otherwise skip. A meta-free pattern is a full literal
+// path and is returned whole. Backslashes are treated as ordinary path bytes,
+// not glob escapes — NewGlobMatcher escapes them so Windows separators match
+// literally, so the extracted prefix keeps them in the same separator form the
+// walked directory paths use.
 func literalGlobPrefix(pattern string) string {
-	if i := strings.IndexAny(pattern, "*?[{"); i >= 0 {
-		return pattern[:i]
+	i := strings.IndexAny(pattern, "*?[{")
+	if i < 0 {
+		return pattern
 	}
-	return pattern
+	if sep := strings.LastIndexAny(pattern[:i], "/\\"); sep >= 0 {
+		return pattern[:sep+1]
+	}
+	return ""
 }
 
 // prunable derives the per-matcher literal prefixes and whether directory pruning

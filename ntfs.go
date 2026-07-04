@@ -165,7 +165,14 @@ func (r *SectorReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	}
 	buf := r.scratch[:size]
 	n, err := r.r.ReadAt(buf, sectorOff)
+	// Report what landed in p, not the padded sector read: clamp n to the
+	// caller's range, and drop the error when the request was fully satisfied —
+	// an EOF from reading past the last sector's padding is not the caller's.
+	n = min(max(n-misalignment, 0), len(p))
 	copy(p, buf[misalignment:])
+	if n == len(p) {
+		err = nil
+	}
 	return n, err
 }
 

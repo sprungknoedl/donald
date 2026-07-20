@@ -331,8 +331,17 @@ func NewHashers() (w io.Writer, finish func() (sha256sum, md5sum string)) {
 	}
 }
 
+// relSlash returns path's location relative to its volume root, always
+// `/`-separated regardless of host OS. filepath.Rel reintroduces the native
+// separator in its output even when both inputs are already slash-normalized,
+// so ToSlash must be reapplied to the result, not just the input.
+func relSlash(path string) (string, error) {
+	rel, err := filepath.Rel(filepath.VolumeName(path)+"/", filepath.ToSlash(path))
+	return filepath.ToSlash(rel), err
+}
+
 func CollectFile(cfg Configuration, archive *zip.Writer, path string) (string, int64, string, string, error) {
-	rel, _ := filepath.Rel(filepath.VolumeName(path)+"/", filepath.ToSlash(path))
+	rel, _ := relSlash(path)
 	r, err := os.Open(path)
 	if err != nil {
 		return rel, 0, "", "", err

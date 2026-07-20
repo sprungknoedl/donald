@@ -325,6 +325,19 @@ func TestNewHashers(t *testing.T) {
 	}
 }
 
+func TestRelSlash(t *testing.T) {
+	rel, err := relSlash("/var/log/sub/file.txt")
+	if err != nil {
+		t.Fatalf("relSlash: %v", err)
+	}
+	if want := "var/log/sub/file.txt"; rel != want {
+		t.Errorf("relSlash(%q) = %q, want %q", "/var/log/sub/file.txt", rel, want)
+	}
+	if strings.Contains(rel, `\`) {
+		t.Errorf("relSlash(%q) = %q, contains backslash", "/var/log/sub/file.txt", rel)
+	}
+}
+
 // buildPruneTree lays down a small tree for the GetPaths pruning tests:
 //
 //	<root>/keep/a.txt

@@ -124,7 +124,7 @@ func CloseRawCollectors() {
 }
 
 func CollectFileRaw(cfg Configuration, archive *zip.Writer, path string) (string, int64, string, string, error) {
-	rel, err := filepath.Rel(filepath.VolumeName(path)+"/", filepath.ToSlash(path))
+	rel, err := relSlash(path)
 	if err != nil {
 		return "", 0, "", "", err
 	}
